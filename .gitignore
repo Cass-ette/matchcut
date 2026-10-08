@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.cache/
+output/
+data/cache/
+data/preferences.json
+.DS_Store
+*.log
