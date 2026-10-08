@@ -11,7 +11,12 @@ import {
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { DEFAULT_MATCH, defaultSettings, settingsSchema } from "../src/domain";
+import {
+  DEFAULT_MATCH,
+  defaultSettings,
+  refreshSettings,
+  settingsSchema,
+} from "../src/domain";
 import {
   initializeData,
   latestMatch,
@@ -229,14 +234,9 @@ app.post(
               )
             : await loadMatch(body.matchId);
         // Auto mode always recomputes match-specific copy, so a previous match's text cannot leak into the new report.
-        const defaults = defaultSettings(data.match);
         const settings =
           body.source === "latest"
-            ? {
-                ...body.settings,
-                headline: defaults.headline,
-                scripts: defaults.scripts,
-              }
+            ? refreshSettings(data.match, body.settings)
             : body.settings;
         await runRender(job, data.match, data.raw, settings, origin, update);
       } catch (e) {

@@ -18,6 +18,11 @@ import {
   PlayerData,
   SCENES,
   VideoProps,
+  Comparison,
+  comparisons,
+  assignedPositions,
+  axisValue,
+  participation,
   compact,
   facts,
   getFocus,
@@ -32,6 +37,13 @@ const font = '"Arial", "PingFang SC", "Microsoft YaHei", sans-serif';
 const display = '"Orbitron", "Arial Black", "Arial", "PingFang SC", sans-serif';
 const mono = '"SF Mono", "Menlo", monospace';
 export const palettes = {
+  obsidian: {
+    bg: "#080706",
+    panel: "#1b1710",
+    ink: "#fff7e5",
+    dim: "#b4a88e",
+    line: "#453825",
+  },
   ember: {
     bg: "#080a10",
     panel: "#11151e",
@@ -154,6 +166,8 @@ function Title({
 function Background({ settings: s }: VideoProps) {
   const frame = useCurrentFrame();
   const p = palettes[s.theme];
+  const arena = s.effects === "arena";
+  const sweep = ((frame * 11) % 2800) - 650;
   return (
     <AbsoluteFill style={{ background: p.bg, overflow: "hidden" }}>
       <AbsoluteFill
@@ -161,17 +175,35 @@ function Background({ settings: s }: VideoProps) {
           background:
             "radial-gradient(ellipse at 15% 50%, " +
             s.accent +
-            "15, transparent 52%), radial-gradient(ellipse at 88% 35%, " +
+            (arena ? "30" : "15") +
+            ", transparent 60%), radial-gradient(ellipse at 88% 35%, " +
             s.secondary +
-            "12, transparent 50%)",
+            (arena ? "24" : "12") +
+            ", transparent 58%)",
         }}
       />
       <svg
         width="1920"
         height="1080"
-        style={{ position: "absolute", opacity: 0.5 }}
+        style={{ position: "absolute", opacity: arena ? 1 : 0.5 }}
       >
         <defs>
+          <radialGradient id="particle-a">
+            <stop offset="0" stopColor="#fff8de" stopOpacity=".9" />
+            <stop offset=".18" stopColor={s.accent} stopOpacity=".65" />
+            <stop offset="1" stopColor={s.accent} stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="particle-b">
+            <stop offset="0" stopColor="#fff" stopOpacity=".8" />
+            <stop offset=".18" stopColor={s.secondary} stopOpacity=".55" />
+            <stop offset="1" stopColor={s.secondary} stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="stage-beam">
+            <stop stopColor={s.accent} stopOpacity="0" />
+            <stop offset=".6" stopColor={s.accent} stopOpacity=".08" />
+            <stop offset=".9" stopColor={s.accent} stopOpacity=".18" />
+            <stop offset="1" stopColor={s.accent} stopOpacity="0" />
+          </linearGradient>
           <pattern
             id="mesh"
             width="80"
@@ -193,22 +225,105 @@ function Background({ settings: s }: VideoProps) {
           strokeWidth="1"
           fill="none"
         />
-        {Array.from({ length: 42 }, (_, i) => {
-          const x = (i * 367 + 29 + frame * (0.15 + (i % 3) * 0.07)) % 1920;
-          const y =
-            (i * 173 + 30 - frame * (0.12 + (i % 4) * 0.04) + 2160) % 1080;
-          return (
-            <circle
-              key={i}
-              cx={x}
-              cy={y}
-              r={i % 4 === 0 ? 2.5 : 1}
-              fill={i % 2 ? s.accent : s.secondary}
-              opacity={0.18 + 0.22 * Math.sin(i + frame / 55) ** 2}
+        {arena && (
+          <>
+            <path
+              d={
+                "M " +
+                sweep +
+                " -100 L " +
+                (sweep + 280) +
+                " -100 L " +
+                (sweep - 410) +
+                " 1180 L " +
+                (sweep - 690) +
+                " 1180 Z"
+              }
+              fill="url(#stage-beam)"
             />
+            <path
+              d="M 0 900 L 300 1080 M 1620 0 L 1920 180"
+              stroke={s.accent}
+              strokeWidth="100"
+              opacity=".035"
+            />
+            {Array.from({ length: 18 }, (_, i) => {
+              const cycle = (frame * (2.4 + (i % 4)) + i * 137) % 2300;
+              const x = ((i * 431 + cycle * 0.48) % 2050) - 60,
+                y = 1130 - (cycle % 1250);
+              const color = i % 4 === 0 ? s.secondary : s.accent;
+              return (
+                <g key={i} opacity={0.23 + (i % 4) * 0.08}>
+                  <line
+                    x1={x - 14}
+                    y1={y + 38}
+                    x2={x}
+                    y2={y}
+                    stroke={color}
+                    strokeWidth={(i % 3) + 1}
+                  />
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r="14"
+                    fill={i % 4 === 0 ? "url(#particle-b)" : "url(#particle-a)"}
+                  />
+                </g>
+              );
+            })}
+          </>
+        )}
+        {Array.from({ length: arena ? 145 : 42 }, (_, i) => {
+          const speed = arena ? 4.5 : 1;
+          const x =
+            (i * 367 + 29 + frame * speed * (0.15 + (i % 3) * 0.07)) % 1920;
+          const y =
+            (((i * 173 + 30 - frame * speed * (0.12 + (i % 4) * 0.04)) % 1080) +
+              1080) %
+            1080;
+          return (
+            <g key={i}>
+              {arena && i % 3 === 0 && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={18 + (i % 11)}
+                  fill={i % 4 === 0 ? "url(#particle-b)" : "url(#particle-a)"}
+                  opacity={0.28 + 0.48 * Math.sin(i + frame / 26) ** 2}
+                />
+              )}
+              <circle
+                cx={x}
+                cy={y}
+                r={arena ? 1.3 + (i % 4) * 0.75 : i % 4 === 0 ? 2.5 : 1}
+                fill={i % 4 === 0 ? s.secondary : s.accent}
+                opacity={
+                  arena
+                    ? 0.3 + 0.55 * Math.sin(i + frame / 30) ** 2
+                    : 0.18 + 0.22 * Math.sin(i + frame / 55) ** 2
+                }
+              />
+            </g>
           );
         })}
       </svg>
+      {arena && (
+        <svg width="1920" height="1080" style={{ position: "absolute" }}>
+          <path
+            d="M 34 135 L 34 34 L 155 34 M 1765 34 L 1886 34 L 1886 135 M 34 945 L 34 1046 L 64 1046 M 1856 1046 L 1886 1046 L 1886 945"
+            stroke={s.accent}
+            strokeWidth="2"
+            opacity=".55"
+            fill="none"
+          />
+          <path
+            d="M 45 125 L 45 45 L 100 45 M 1820 45 L 1875 45 L 1875 125"
+            stroke={s.secondary}
+            opacity=".25"
+            fill="none"
+          />
+        </svg>
+      )}
       <div
         style={{
           position: "absolute",
@@ -663,14 +778,16 @@ function RadarChart({
   props,
   mode,
   local,
+  comparison,
 }: {
   props: Ctx;
   mode: number;
   local: number;
+  comparison: Comparison & { pair: [PlayerData, PlayerData] };
 }) {
   const { match: m, settings: s } = props;
   const p = palettes[s.theme],
-    axes = radar(m);
+    axes = radar(m, comparison.pair, comparison.position);
   const cx = 485,
     cy = 363,
     r = 258;
@@ -685,49 +802,115 @@ function RadarChart({
     b = axes.map((x) => x.br);
   const active =
     mode === 0
-      ? a.map((v) => v * morph)
+      ? a.map((v) => (v === undefined ? undefined : v * morph))
       : mode === 1
-        ? b.map((v, i) => a[i] + (v - a[i]) * morph)
+        ? b.map((v, i) =>
+            v === undefined || a[i] === undefined
+              ? undefined
+              : a[i]! + (v - a[i]!) * morph,
+          )
         : b;
   const color = mode === 0 ? s.accent : s.secondary;
-  const shape = (values: number[], c: string, alpha = 1, key = "") => (
+  const shape = (
+    values: (number | undefined)[],
+    c: string,
+    alpha = 1,
+    key = "",
+  ) => (
     <g key={key} opacity={alpha}>
-      <polygon
-        points={polygon(values)}
-        fill={c + "13"}
-        stroke={c}
-        strokeWidth="15"
-        strokeLinejoin="round"
-        opacity=".14"
-      />
-      <polygon
-        points={polygon(values)}
-        fill={c + "0d"}
-        stroke={c}
-        strokeWidth="5"
-        strokeLinejoin="round"
-        opacity=".7"
-      />
-      <polygon
-        points={polygon(values)}
-        fill="none"
-        stroke={c}
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      {values.map((v, i) => (
-        <circle
-          key={i}
-          cx={point(i, r * v)[0]}
-          cy={point(i, r * v)[1]}
-          r="4"
-          fill="#fff"
-        />
-      ))}
+      {values.every((v) => v !== undefined) ? (
+        <>
+          <polygon
+            points={polygon(values as number[])}
+            fill={c + "13"}
+            stroke={c}
+            strokeWidth={s.effects === "arena" ? "27" : "15"}
+            strokeLinejoin="round"
+            opacity={s.effects === "arena" ? ".24" : ".14"}
+          />
+          <polygon
+            points={polygon(values as number[])}
+            fill={c + "0d"}
+            stroke={c}
+            strokeWidth={s.effects === "arena" ? "9" : "5"}
+            strokeLinejoin="round"
+            opacity=".6"
+          />
+          <polygon
+            points={polygon(values as number[])}
+            fill="none"
+            stroke={c}
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : (
+        values.map((v, i) => {
+          const next = values[(i + 1) % values.length];
+          if (v === undefined || next === undefined) return null;
+          return (
+            <line
+              key={i}
+              x1={point(i, r * v)[0]}
+              y1={point(i, r * v)[1]}
+              x2={point((i + 1) % values.length, r * next)[0]}
+              y2={point((i + 1) % values.length, r * next)[1]}
+              stroke={c}
+              strokeWidth="3"
+            />
+          );
+        })
+      )}
+      {values.map((v, i) =>
+        v === undefined ? null : (
+          <circle
+            key={i}
+            cx={point(i, r * v)[0]}
+            cy={point(i, r * v)[1]}
+            r="4"
+            fill="#fff"
+          />
+        ),
+      )}
     </g>
   );
   return (
     <svg width="970" height="760" style={{ overflow: "visible" }}>
+      {s.effects === "arena" && (
+        <g>
+          <circle
+            cx={cx}
+            cy={cy}
+            r="319"
+            fill="none"
+            stroke={color}
+            strokeWidth="4"
+            strokeDasharray="135 340 30 480"
+            opacity=".72"
+            transform={"rotate(" + local * 0.65 + " " + cx + " " + cy + ")"}
+          />
+          <circle
+            cx={cx}
+            cy={cy}
+            r="303"
+            fill="none"
+            stroke={color}
+            strokeWidth="1.5"
+            strokeDasharray="3 14"
+            opacity=".55"
+            transform={"rotate(" + -local * 0.32 + " " + cx + " " + cy + ")"}
+          />
+          <circle
+            cx={cx}
+            cy={cy}
+            r={70 + ((local * 2) % 220)}
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            opacity={0.23 * (1 - ((local * 2) % 220) / 220)}
+          />
+        </g>
+      )}
       <circle
         cx={cx}
         cy={cy}
@@ -775,14 +958,7 @@ function RadarChart({
       )}
       {axes.map((axis, i) => {
         const [x, y] = point(i, r + 83);
-        const label = [
-          "击杀 / KILLS",
-          "助攻 / AST",
-          "经济 / GPM",
-          "经验 / XPM",
-          "伤害 / DPM",
-          "建筑伤害",
-        ][i];
+        const label = axis.label;
         return (
           <g key={axis.label} textAnchor="middle">
             <text x={x} y={y - 8} fill={p.dim} fontSize="21" fontWeight="700">
@@ -798,12 +974,14 @@ function RadarChart({
             >
               {mode === 2 ? (
                 <>
-                  <tspan fill={s.accent}>{num(axis.a)}</tspan>
+                  <tspan fill={s.accent}>{axisValue(axis.a, axis.unit)}</tspan>
                   <tspan fill={p.dim}> / </tspan>
-                  <tspan fill={s.secondary}>{num(axis.b)}</tspan>
+                  <tspan fill={s.secondary}>
+                    {axisValue(axis.b, axis.unit)}
+                  </tspan>
                 </>
               ) : (
-                num(mode === 0 ? axis.a : axis.b)
+                axisValue(mode === 0 ? axis.a : axis.b, axis.unit)
               )}
             </text>
           </g>
@@ -815,11 +993,32 @@ function RadarChart({
 function RadarScene(props: Ctx) {
   const { match: m, settings: s } = props;
   const p = palettes[s.theme],
-    frame = useCurrentFrame(),
-    focus = getFocus(m);
-  const third = props.segments[2].frames / 3;
-  const mode = Math.min(2, Math.floor(frame / third)),
-    local = frame - mode * third;
+    frame = useCurrentFrame();
+  const groups = comparisons(m, s),
+    groupFrames = props.segments[2].frames / groups.length;
+  const groupIndex = Math.min(
+    groups.length - 1,
+    Math.floor(frame / groupFrames),
+  );
+  const comparison = groups[groupIndex];
+  const third = groupFrames / 3,
+    groupFrame = frame - groupIndex * groupFrames;
+  const mode = Math.min(2, Math.floor(groupFrame / third)),
+    local = groupFrame - mode * third;
+  if (!comparison.pair)
+    return (
+      <AbsoluteFill
+        style={{ justifyContent: "center", alignItems: "center", gap: 25 }}
+      >
+        <Tag color={s.accent}>{comparison.label}</Tag>
+        <div style={{ fontSize: 62, fontWeight: 800 }}>对位待修正</div>
+        <div style={{ fontSize: 27, color: p.dim }}>
+          位置数据缺失或冲突，请在工作台核对双方位置。
+        </div>
+      </AbsoluteFill>
+    );
+  const focus = comparison.pair;
+  const support = Boolean(comparison.position && comparison.position >= 4);
   const player = focus[mode === 0 ? 0 : 1],
     color = teamColor(player, s);
   const teamTotal = m.players
@@ -838,12 +1037,20 @@ function RadarScene(props: Ctx) {
         }}
       >
         <Tag color={mode === 0 ? s.accent : mode === 1 ? s.secondary : p.ink}>
-          03 / PLAYER RADAR
+          03 /{" "}
+          {comparison.position
+            ? "POSITION " + String(comparison.position).padStart(2, "0")
+            : "DAMAGE DUEL"}
         </Tag>
-        <span style={{ fontSize: 20, color: p.dim }}>双方队内伤害第一</span>
+        <span style={{ fontSize: 24, color: p.ink }}>{comparison.label}</span>
       </div>
       <div style={{ position: "absolute", top: 200, left: 72 }}>
-        <RadarChart props={props} mode={mode} local={local} />
+        <RadarChart
+          props={props}
+          mode={mode}
+          local={local}
+          comparison={{ ...comparison, pair: focus }}
+        />
       </div>
       <div
         style={{
@@ -892,6 +1099,10 @@ function RadarScene(props: Ctx) {
               width: 750,
               height: 615,
               opacity: 0.94,
+              filter:
+                s.effects === "arena"
+                  ? "drop-shadow(0 0 25px " + color + "80)"
+                  : undefined,
               transform: "translateX(" + (1 - enter(local, 0, 36)) * 65 + "px)",
               maskImage: "linear-gradient(to bottom,#000 64%,transparent 100%)",
             }}
@@ -907,7 +1118,10 @@ function RadarScene(props: Ctx) {
                 ...digits,
                 fontSize: fit(player.name, 650, 105),
                 marginTop: 14,
-                textShadow: "0 0 35px " + color + "70",
+                textShadow:
+                  s.effects === "arena"
+                    ? "0 0 18px " + color + "aa, 0 0 60px " + color + "70"
+                    : "0 0 35px " + color + "70",
               }}
             >
               {player.name}
@@ -937,12 +1151,16 @@ function RadarScene(props: Ctx) {
               <div
                 style={{ borderLeft: "1px solid " + p.line, paddingLeft: 35 }}
               >
-                <Tag color={p.dim}>队内伤害占比</Tag>
+                <Tag color={p.dim}>
+                  {support ? "参战率 / KP" : "队内伤害占比"}
+                </Tag>
                 <div style={{ ...digits, color, fontSize: 46, marginTop: 15 }}>
-                  {teamTotal
-                    ? ((100 * player.damage) / teamTotal).toFixed(1)
-                    : "0.0"}
-                  <span style={{ fontSize: 25 }}>%</span>
+                  {support
+                    ? axisValue(participation(m, player), "%")
+                    : teamTotal
+                      ? ((100 * player.damage) / teamTotal).toFixed(1)
+                      : "0.0"}
+                  {!support && <span style={{ fontSize: 25 }}>%</span>}
                 </div>
               </div>
             </div>
@@ -958,7 +1176,7 @@ function RadarScene(props: Ctx) {
             opacity: enter(local, 0, 18),
           }}
         >
-          <Tag color={p.dim}>HEAD TO HEAD / 本局数据</Tag>
+          <Tag color={p.dim}>{comparison.label} / HEAD TO HEAD</Tag>
           {focus.map((pl) => (
             <div
               key={pl.slot}
@@ -994,8 +1212,10 @@ function RadarScene(props: Ctx) {
                 {pl.kills} / {pl.deaths} / {pl.assists}{" "}
                 <span style={{ fontSize: 18, color: p.dim }}>KDA</span>
                 <span style={{ marginLeft: 40 }}>
-                  {num(pl.damage)}{" "}
-                  <span style={{ fontSize: 18, color: p.dim }}>伤害</span>
+                  {support ? axisValue(pl.healing) : num(pl.damage)}{" "}
+                  <span style={{ fontSize: 18, color: p.dim }}>
+                    {support ? "治疗" : "伤害"}
+                  </span>
                 </span>
               </div>
             </div>
@@ -1012,7 +1232,9 @@ function RadarScene(props: Ctx) {
           >
             每轴以二人较高值为外圈。
             <br />
-            比较本场数据，不作综合能力评级。
+            {support
+              ? "眼位为放置数，眩晕为累计秒数。"
+              : "比较本场数据，不作综合能力评级。"}
           </div>
         </div>
       )}
@@ -1027,9 +1249,11 @@ function RadarScene(props: Ctx) {
           lineHeight: 1.6,
         }}
       >
-        六轴相对值 · 非能力评分
+        {comparison.provenance} · 六轴相对值
         <br />
-        DPM = 英雄伤害 / 本场分钟数
+        {support
+          ? "KP =（击杀 + 助攻）/ 队伍击杀 · — 为缺失"
+          : "DPM = 英雄伤害 / 本场分钟数 · 非能力评分"}
       </div>
     </AbsoluteFill>
   );

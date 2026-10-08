@@ -11,6 +11,9 @@ import {
   FPS,
   VIDEO_WIDTH,
   VIDEO_HEIGHT,
+  assertComparisons,
+  assignedPositions,
+  comparisons,
   MatchData,
   Settings,
   VideoProps,
@@ -93,6 +96,7 @@ export async function runRender(
     const props = previewProps(match, settings);
     const { segments, captions } = props;
     job.props = props;
+    assertComparisons(match, settings);
     job.width = settings.resolution === "720" ? 1280 : VIDEO_WIDTH;
     job.height = settings.resolution === "720" ? 720 : VIDEO_HEIGHT;
     job.message = "准备视频模板";
@@ -152,7 +156,7 @@ export async function runRender(
       path.join(folder, "project.json"),
       JSON.stringify(
         {
-          schemaVersion: 2,
+          schemaVersion: 3,
           aspectRatio: "16:9",
           width: job.width,
           height: job.height,
@@ -161,6 +165,18 @@ export async function runRender(
           segments,
           frames: totalFrames(segments),
           fps: FPS,
+          comparisonMode: settings.radarMode,
+          positions: assignedPositions(match, settings).map((x) => ({
+            slot: x.player.slot,
+            name: x.player.name,
+            position: x.position,
+            source: x.source,
+          })),
+          comparisons: comparisons(match, settings).map((x) => ({
+            label: x.label,
+            slots: x.pair?.map((p) => p.slot),
+            provenance: x.provenance,
+          })),
         },
         null,
         2,
@@ -191,7 +207,19 @@ export async function runRender(
         match.league +
         "\n数据来源：" +
         match.source +
-        "\n雷达各轴按两名选手较高值归一化，非综合能力评分。\n\n" +
+        "\n雷达各轴按对比二人较高值归一化，非综合能力评分。\n" +
+        comparisons(match, settings)
+          .map(
+            (x) =>
+              x.label +
+              "：" +
+              x.pair?.map((p) => p.name).join(" vs ") +
+              "（" +
+              x.provenance +
+              "）",
+          )
+          .join("\n") +
+        "\n\n" +
         settings.scripts.join("\n\n") +
         "\n",
     );

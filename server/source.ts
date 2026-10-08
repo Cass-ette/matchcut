@@ -1,11 +1,6 @@
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
-import {
-  DEFAULT_MATCH,
-  getFocus,
-  normalizeMatch,
-  type MatchData,
-} from "../src/domain";
+import { DEFAULT_MATCH, normalizeMatch, type MatchData } from "../src/domain";
 
 const root = process.cwd();
 const cache = path.join(root, "data/cache");
@@ -93,7 +88,7 @@ async function heroConstants(): Promise<Record<string, any>> {
 }
 const artworkRetryAfter = new Map<number, number>();
 async function ensureArtwork(m: MatchData, heroes: Record<string, any>) {
-  for (const p of getFocus(m)) {
+  for (const p of m.players) {
     const relative = "/assets/renders/" + p.heroId + ".png";
     const dest = path.join(root, "public", relative);
     if (await exists(dest)) {

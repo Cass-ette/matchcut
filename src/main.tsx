@@ -39,6 +39,12 @@ import {
   SCENES,
   Settings,
   VideoProps,
+  POSITIONS,
+  POSITION_NAMES,
+  assignedPositions,
+  comparisons,
+  comparisonScript,
+  refreshSettings,
   defaultSettings,
   matchDuration,
   previewProps,
@@ -71,17 +77,15 @@ async function api<T = any>(url: string, options?: RequestInit): Promise<T> {
   if (!r.ok) throw new Error(data.error || "请求失败");
   return data;
 }
-const presentation = (s: Settings) => ({
-  theme: s.theme,
-  accent: s.accent,
-  secondary: s.secondary,
-  brand: s.brand,
-  outro: s.outro,
-  pace: s.pace,
-  captions: s.captions,
-  resolution: s.resolution,
-});
 const themes = [
+  {
+    id: "obsidian",
+    name: "黑金荣耀",
+    description: "曜黑 × 熔金 · 决赛舞台",
+    a: "#f6c453",
+    b: "#c4d0e4",
+    bg: "#080706",
+  },
   {
     id: "ember",
     name: "烈焰对决",
@@ -138,10 +142,11 @@ function App() {
         const prefs = data.preferences;
         setSettings(
           prefs?.settings
-            ? {
-                ...data.settings,
-                ...presentation(settingsSchema.parse(prefs.settings)),
-              }
+            ? refreshSettings(
+                data.match,
+                settingsSchema.parse(prefs.settings),
+                true,
+              )
             : data.settings,
         );
         setSource(prefs?.source || "current");
@@ -238,10 +243,9 @@ function App() {
       const data = await api("/api/matches/" + encodeURIComponent(id.trim()));
       setMatch(data.match);
       setMatchId(data.match.id);
-      setSettings((current) => ({
-        ...data.settings,
-        ...(current ? presentation(current) : {}),
-      }));
+      setSettings((current) =>
+        current ? refreshSettings(data.match, current) : data.settings,
+      );
       setSource("current");
       setRecent(null);
       setResult(null);
@@ -294,13 +298,41 @@ function App() {
       props.segments.slice(0, index).reduce((sum, x) => sum + x.frames, 0) + 65,
     );
   }
+  function changeComparison(changes: Partial<Settings>) {
+    if (!match) return;
+    setSettings((current) => {
+      if (!current) return current;
+      const next = { ...current, ...changes, scripts: [...current.scripts] };
+      next.scripts[2] = comparisonScript(match, next);
+      return next;
+    });
+    player.current?.pause();
+  }
+  function changePosition(slot: number, position: number) {
+    if (!match || !settings) return;
+    const assigned = assignedPositions(match, settings);
+    const current = assigned.find((x) => x.player.slot === slot)!;
+    const occupant = assigned.find(
+      (x) =>
+        x.player.side === current.player.side &&
+        x.position === position &&
+        x.player.slot !== slot,
+    );
+    const roles =
+      settings.positionOverrides?.matchId === match.id
+        ? { ...settings.positionOverrides.roles }
+        : {};
+    if (occupant) roles[occupant.player.slot] = current.position || 0;
+    roles[slot] = position;
+    changeComparison({ positionOverrides: { matchId: match.id, roles } });
+  }
   function exportTemplate() {
     if (!settings || !match) return;
     const file = new Blob(
       [
         JSON.stringify(
           {
-            schemaVersion: 2,
+            schemaVersion: 3,
             aspectRatio: "16:9",
             matchId: match.id,
             settings,
@@ -326,7 +358,13 @@ function App() {
     setLoading(true);
     try {
       const json = JSON.parse(await file.text());
-      const next = settingsSchema.parse(json.settings);
+      const next = settingsSchema.parse({
+        ...json.settings,
+        radarMode:
+          json.schemaVersion <= 2 && !json.settings?.radarMode
+            ? "damage"
+            : json.settings?.radarMode,
+      });
       if (!/^\d{6,15}$/.test(String(json.matchId)))
         throw new Error("项目里没有有效的比赛编号。");
       const data = await api("/api/matches/" + json.matchId);
@@ -360,6 +398,9 @@ function App() {
       </div>
     );
   const winner = match[match.winner];
+  const matchups = comparisons(match, settings);
+  const assigned = assignedPositions(match, settings);
+  const incomplete = matchups.some((c) => !c.pair);
   return (
     <div className="app">
       <header className="topbar">
@@ -589,7 +630,14 @@ function App() {
                       [
                         "最终赛果与看点",
                         "优势随时间的变化",
-                        "选手聚焦 → 双人对比",
+                        settings.radarMode === "damage"
+                          ? "双方伤害最高"
+                          : settings.radarPosition === "all"
+                            ? "一至五号位 · 五组对位"
+                            : POSITION_NAMES[
+                                Number(settings.radarPosition) as
+                                  1 | 2 | 3 | 4 | 5
+                              ],
                         "全场输出前五",
                         "结果与数据出处",
                       ][i]
@@ -671,6 +719,143 @@ function App() {
               </button>
             ))}
           </div>
+          <section className="matchups-panel">
+            <div className="subheading">
+              <span>雷达对比</span>
+              <span>
+                {settings.radarMode === "positions" ? "按职责对位" : "输出焦点"}
+              </span>
+            </div>
+            <div className="comparison-controls">
+              <select
+                aria-label="雷达对比模式"
+                value={settings.radarMode}
+                onChange={(e) =>
+                  changeComparison({
+                    radarMode: e.target.value as Settings["radarMode"],
+                  })
+                }
+              >
+                <option value="positions">按位置对比（默认）</option>
+                <option value="damage">双方伤害最高</option>
+              </select>
+              {settings.radarMode === "positions" && (
+                <select
+                  aria-label="展示位置"
+                  value={settings.radarPosition}
+                  onChange={(e) =>
+                    changeComparison({
+                      radarPosition: e.target
+                        .value as Settings["radarPosition"],
+                    })
+                  }
+                >
+                  <option value="all">全部五组对位</option>
+                  {POSITIONS.map((position) => (
+                    <option key={position} value={String(position)}>
+                      {POSITION_NAMES[position]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="matchup-list">
+              {matchups.map((c, i) => (
+                <button
+                  key={c.key}
+                  onClick={() => {
+                    setScene(2);
+                    player.current?.pause();
+                    player.current?.seekTo(
+                      props.segments[0].frames +
+                        props.segments[1].frames +
+                        Math.floor(
+                          (props.segments[2].frames * i) / matchups.length,
+                        ) +
+                        65,
+                    );
+                  }}
+                >
+                  <span>{c.label}</span>
+                  <b>
+                    {c.pair
+                      ? c.pair[0].name + " vs " + c.pair[1].name
+                      : "对位待修正"}
+                  </b>
+                  <small>{c.provenance}</small>
+                </button>
+              ))}
+            </div>
+            {settings.radarMode === "positions" && (
+              <details className="position-editor">
+                <summary>
+                  核对 / 修正选手位置 <span>仅影响本场比赛</span>
+                </summary>
+                <p>
+                  位置来自 OpenDota
+                  的估计，不按玩家列表顺序分配。选择已占用的位置会交换两人；换比赛后重新读取位置。
+                </p>
+                <div className="position-teams">
+                  {(["radiant", "dire"] as const).map((side) => (
+                    <div key={side}>
+                      <b>{match[side]}</b>
+                      {assigned
+                        .filter((x) => x.player.side === side)
+                        .map((x) => (
+                          <label key={x.player.slot}>
+                            <span>
+                              {x.player.name}
+                              <small>
+                                {x.source === "manual"
+                                  ? "手动指定"
+                                  : x.source === "estimate"
+                                    ? "数据源估计"
+                                    : "缺失 / 冲突"}
+                              </small>
+                            </span>
+                            <select
+                              aria-label={
+                                match[side] + " " + x.player.name + " 位置"
+                              }
+                              value={x.position || 0}
+                              onChange={(e) =>
+                                changePosition(
+                                  x.player.slot,
+                                  Number(e.target.value),
+                                )
+                              }
+                            >
+                              <option value="0">待确定</option>
+                              {POSITIONS.map((position) => (
+                                <option key={position} value={position}>
+                                  {POSITION_NAMES[position]}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ))}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    changeComparison({ positionOverrides: undefined })
+                  }
+                >
+                  <RefreshCw size={13} /> 恢复数据源估计
+                </button>
+              </details>
+            )}
+            {incomplete && (
+              <p className="error-text" role="alert">
+                有位置缺失或重复，请修正后生成；不会用伤害排名替代对位。
+              </p>
+            )}
+            <p className="comparison-note">
+              一至三号位：击杀、助攻、经济、经验、伤害、推塔。四、五号位：助攻、参战率、观察守卫、岗哨守卫、眩晕时长、治疗。均为本场数据，非能力评级。
+            </p>
+          </section>
           <div className="export-bar">
             <div>
               <b>{busy ? "正在渲染赛后节目" : "导出横屏成片"}</b>
@@ -681,7 +866,7 @@ function App() {
             <button
               className="generate-button"
               onClick={generate}
-              disabled={busy || loading}
+              disabled={busy || loading || (incomplete && source !== "latest")}
             >
               {busy ? (
                 <LoaderCircle size={18} className="spin" />
@@ -856,7 +1041,18 @@ function App() {
                   <i />
                 </label>
               ))}
-              <label className="field-label">画面节奏</label>
+              <label className="field-label">特效强度</label>
+              <select
+                aria-label="特效强度"
+                value={settings.effects}
+                onChange={(e) =>
+                  patch("effects", e.target.value as Settings["effects"])
+                }
+              >
+                <option value="arena">高燃 · 粒子 / 光带 / 辉光</option>
+                <option value="restrained">收敛 · 减少粒子与光效</option>
+              </select>
+              <label className="field-label">镜头节奏</label>
               <select
                 aria-label="画面节奏"
                 value={settings.pace}
@@ -929,7 +1125,7 @@ function App() {
               <button
                 className="text-button"
                 onClick={() => {
-                  const d = defaultSettings(match);
+                  const d = refreshSettings(match, settings, true);
                   patch("scripts", d.scripts);
                   patch("headline", d.headline);
                   setToast("已恢复这场比赛的默认文案");
@@ -1120,8 +1316,9 @@ function App() {
               解析可能滞后；数据不完整时会明确提示，不自动填零。
             </p>
             <p>
-              雷达展示双方伤害最高选手的相对数值，每轴较高者为
-              100%。它不代表综合能力，也没有假定两人的场上位置相同。
+              雷达默认按一至五号位逐组对比，可只选一个位置，也可切换为双方伤害最高。
+              位置来自 OpenDota 估计，可手动修正；每轴较高者为
+              100%，不代表综合能力。
             </p>
             <div className="help-source">
               <a

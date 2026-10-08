@@ -12,8 +12,25 @@ export const SCENES = [
   "赛后定格",
 ] as const;
 export const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+export const POSITIONS = [1, 2, 3, 4, 5] as const;
+export type Position = (typeof POSITIONS)[number];
+export const POSITION_NAMES: Record<Position, string> = {
+  1: "一号位 · 核心",
+  2: "二号位 · 中单",
+  3: "三号位 · 劣势路",
+  4: "四号位 · 游走",
+  5: "五号位 · 辅助",
+};
+const positionOverridesSchema = z.object({
+  matchId: z.string().regex(/^\d{6,15}$/),
+  roles: z.record(
+    z.string().regex(/^(?:[0-4]|12[89]|13[0-2])$/),
+    z.number().int().min(0).max(5),
+  ),
+});
 export const settingsSchema = z.object({
-  theme: z.enum(["ember", "glacier", "paper"]).default("ember"),
+  theme: z.enum(["ember", "glacier", "paper", "obsidian"]).default("ember"),
+  effects: z.enum(["restrained", "arena"]).default("arena"),
   accent: colorSchema.default("#ff6138"),
   secondary: colorSchema.default("#50d9ed"),
   brand: z.string().trim().min(1).max(24).default("赛后雷达"),
@@ -23,6 +40,9 @@ export const settingsSchema = z.object({
   captions: z.boolean().default(true),
   scripts: z.array(z.string().trim().min(1).max(240)).length(5),
   resolution: z.enum(["1080", "720"]).default("1080"),
+  radarMode: z.enum(["positions", "damage"]).default("positions"),
+  radarPosition: z.enum(["all", "1", "2", "3", "4", "5"]).default("all"),
+  positionOverrides: positionOverridesSchema.optional(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 export type PlayerData = {
@@ -41,6 +61,11 @@ export type PlayerData = {
   damage: number;
   tower: number;
   lastHits: number;
+  positionEstimate?: Position;
+  obs?: number;
+  sentries?: number;
+  stuns?: number;
+  healing?: number;
 };
 export type MatchData = {
   id: string;
@@ -80,6 +105,8 @@ const finite = (value: unknown, field: string, nonnegative = true): number => {
 };
 const safeText = (v: unknown, fallback: string) =>
   typeof v === "string" && v.trim() ? v.trim().slice(0, 80) : fallback;
+const optionalStat = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined;
 export function normalizeMatch(
   raw: any,
   heroes: Record<string, any>,
@@ -126,6 +153,13 @@ export function normalizeMatch(
       damage: finite(p.hero_damage, "英雄伤害"),
       tower: finite(p.tower_damage, "建筑伤害"),
       lastHits: finite(p.last_hits, "补刀"),
+      positionEstimate: POSITIONS.includes(p.position_est)
+        ? p.position_est
+        : undefined,
+      obs: optionalStat(p.obs_placed),
+      sentries: optionalStat(p.sen_placed),
+      stuns: optionalStat(p.stuns),
+      healing: optionalStat(p.hero_healing),
     };
   });
   const adv = raw.radiant_gold_adv;
@@ -183,6 +217,142 @@ export const getFocus = (m: MatchData): [PlayerData, PlayerData] => [
     .filter((p) => p.side === "dire")
     .sort((a, b) => b.damage - a.damage)[0],
 ];
+export type AssignedPlayer = {
+  player: PlayerData;
+  position?: Position;
+  source: "manual" | "estimate" | "unknown";
+};
+export function assignedPositions(
+  m: MatchData,
+  s?: Settings,
+): AssignedPlayer[] {
+  const overrides =
+    s?.positionOverrides?.matchId === m.id ? s.positionOverrides.roles : {};
+  const assigned = m.players.map((player) => {
+    const manual = Object.prototype.hasOwnProperty.call(
+      overrides,
+      String(player.slot),
+    );
+    const position = manual
+      ? overrides[player.slot] || undefined
+      : player.positionEstimate;
+    return {
+      player,
+      position: position as Position | undefined,
+      source: position ? (manual ? "manual" : "estimate") : "unknown",
+    } as AssignedPlayer;
+  });
+  // An estimate is not a roster declaration. Ambiguous positions stay unresolved.
+  return assigned.map((entry) =>
+    entry.position &&
+    assigned.some(
+      (other) =>
+        other !== entry &&
+        other.player.side === entry.player.side &&
+        other.position === entry.position,
+    )
+      ? { ...entry, position: undefined, source: "unknown" }
+      : entry,
+  );
+}
+export type Comparison = {
+  key: string;
+  label: string;
+  position?: Position;
+  pair?: [PlayerData, PlayerData];
+  provenance: string;
+};
+export function comparisons(m: MatchData, s: Settings): Comparison[] {
+  if (s.radarMode === "damage")
+    return [
+      {
+        key: "damage",
+        label: "双方伤害最高",
+        pair: getFocus(m),
+        provenance: "按英雄总伤害选取 · 不要求同位置",
+      },
+    ];
+  const assigned = assignedPositions(m, s);
+  const positions =
+    s.radarPosition === "all"
+      ? POSITIONS
+      : [Number(s.radarPosition) as Position];
+  return positions.map((position) => {
+    const a = assigned.find(
+      (x) => x.player.side === "radiant" && x.position === position,
+    );
+    const b = assigned.find(
+      (x) => x.player.side === "dire" && x.position === position,
+    );
+    return {
+      key: String(position),
+      label: POSITION_NAMES[position],
+      position,
+      pair:
+        a && b ? ([a.player, b.player] as [PlayerData, PlayerData]) : undefined,
+      provenance:
+        !a || !b
+          ? "位置未确定 · 请修正对位"
+          : a.source === "manual" && b.source === "manual"
+            ? "位置：手动指定"
+            : a.source === "estimate" && b.source === "estimate"
+              ? "位置：OpenDota 估计"
+              : "位置：手动指定 / OpenDota 估计",
+    };
+  });
+}
+export function assertComparisons(m: MatchData, s: Settings) {
+  const missing = comparisons(m, s).filter((c) => !c.pair);
+  if (missing.length)
+    throw new Error(
+      missing.map((c) => c.label).join("、") +
+        "对位不完整。请在位置设置中修正，或选择已确定的位置。",
+    );
+}
+export const participation = (
+  m: MatchData,
+  player: PlayerData,
+): number | undefined => {
+  const kills = player.side === "radiant" ? m.radiantScore : m.direScore;
+  return kills > 0
+    ? ((player.kills + player.assists) / kills) * 100
+    : undefined;
+};
+export function comparisonScript(m: MatchData, s: Settings) {
+  if (s.radarMode === "damage") {
+    const [a, b] = getFocus(m);
+    return (
+      a.name + " 与 " + b.name + "：双方伤害最高选手的本场对比，不要求同位置。"
+    );
+  }
+  if (s.radarPosition === "all")
+    return "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。";
+  const comparison = comparisons(m, s)[0];
+  return (
+    comparison.label +
+    "对位：" +
+    (comparison.pair?.map((p) => p.name).join(" 与 ") || "等待修正位置") +
+    "。各轴为本场相对数值，非能力评分。"
+  );
+}
+export function refreshSettings(
+  m: MatchData,
+  previous: Settings,
+  keepOverrides = false,
+): Settings {
+  const defaults = defaultSettings(m);
+  const settings = {
+    ...previous,
+    headline: defaults.headline,
+    scripts: [...defaults.scripts],
+    positionOverrides:
+      keepOverrides && previous.positionOverrides?.matchId === m.id
+        ? previous.positionOverrides
+        : undefined,
+  };
+  settings.scripts[2] = comparisonScript(m, settings);
+  return settings;
+}
 export const sortedDamage = (m: MatchData) =>
   [...m.players].sort((a, b) => b.damage - a.damage);
 export function facts(m: MatchData) {
@@ -202,7 +372,6 @@ export function facts(m: MatchData) {
 }
 export function defaultSettings(m: MatchData): Settings {
   const f = facts(m);
-  const [a, b] = getFocus(m);
   const winKills = m.winner === "radiant" ? m.radiantScore : m.direScore;
   const loseKills = m.winner === "radiant" ? m.direScore : m.radiantScore;
   const economic =
@@ -231,10 +400,7 @@ export function defaultSettings(m: MatchData): Settings {
         loseKills +
         "。",
       economic,
-      a.name +
-        " 与 " +
-        b.name +
-        "：双方伤害最高选手的本场对比。各轴为相对数值，非能力评分。",
+      "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。",
       f.top.name +
         " 打出 " +
         num(f.top.damage) +
@@ -243,26 +409,62 @@ export function defaultSettings(m: MatchData): Settings {
     ],
   });
 }
-export function radar(m: MatchData) {
-  const [a, b] = getFocus(m);
-  const axes = [
-    { label: "击杀", a: a.kills, b: b.kills },
-    { label: "助攻", a: a.assists, b: b.assists },
-    { label: "经济 / 分", a: a.gpm, b: b.gpm },
-    { label: "经验 / 分", a: a.xpm, b: b.xpm },
-    {
-      label: "伤害 / 分",
-      a: a.damage / (m.duration / 60),
-      b: b.damage / (m.duration / 60),
-    },
-    { label: "建筑伤害", a: a.tower, b: b.tower },
-  ];
+export function radar(
+  m: MatchData,
+  pair: [PlayerData, PlayerData] = getFocus(m),
+  position?: Position,
+) {
+  const [a, b] = pair;
+  const axes: {
+    label: string;
+    a: number | undefined;
+    b: number | undefined;
+    unit?: string;
+  }[] =
+    position && position >= 4
+      ? [
+          { label: "助攻 / AST", a: a.assists, b: b.assists },
+          {
+            label: "参战率 / KP",
+            a: participation(m, a),
+            b: participation(m, b),
+            unit: "%",
+          },
+          { label: "观察守卫", a: a.obs, b: b.obs },
+          { label: "岗哨守卫", a: a.sentries, b: b.sentries },
+          { label: "眩晕时长", a: a.stuns, b: b.stuns, unit: "s" },
+          { label: "英雄治疗", a: a.healing, b: b.healing },
+        ]
+      : [
+          { label: "击杀", a: a.kills, b: b.kills },
+          { label: "助攻", a: a.assists, b: b.assists },
+          { label: "经济 / 分", a: a.gpm, b: b.gpm },
+          { label: "经验 / 分", a: a.xpm, b: b.xpm },
+          {
+            label: "伤害 / 分",
+            a: a.damage / (m.duration / 60),
+            b: b.damage / (m.duration / 60),
+          },
+          { label: "建筑伤害", a: a.tower, b: b.tower },
+        ];
   return axes.map((x) => ({
     ...x,
-    ar: Math.max(x.a, x.b) ? x.a / Math.max(x.a, x.b) : 0,
-    br: Math.max(x.a, x.b) ? x.b / Math.max(x.a, x.b) : 0,
+    ar:
+      x.a === undefined || x.b === undefined
+        ? undefined
+        : Math.max(x.a, x.b)
+          ? x.a / Math.max(x.a, x.b)
+          : 0,
+    br:
+      x.a === undefined || x.b === undefined
+        ? undefined
+        : Math.max(x.a, x.b)
+          ? x.b / Math.max(x.a, x.b)
+          : 0,
   }));
 }
+export const axisValue = (value: number | undefined, unit?: string) =>
+  value === undefined ? "—" : unit ? value.toFixed(1) + unit : num(value);
 export const totalFrames = (segments: Segment[]) =>
   segments.reduce((s, x) => s + x.frames, 0);
 export function captionLines(text: string): string[] {
@@ -312,13 +514,35 @@ export function makeCaptions(segments: Segment[]): Caption[] {
   return result;
 }
 export function previewProps(match: MatchData, settings: Settings): VideoProps {
-  const base = [7, 10, 24, 10, 7];
+  const groups = comparisons(match, settings);
+  const base = [7, 10, groups.length > 1 ? groups.length * 18 : 24, 10, 7];
   const speed = { snappy: 0.82, standard: 1, relaxed: 1.2 }[settings.pace];
   const segments = settings.scripts.map((text, i) => ({
     text,
     frames: Math.ceil(Math.max(base[i], text.length / 5.5 + 1) * speed * FPS),
   }));
-  return { match, settings, segments, captions: makeCaptions(segments) };
+  const captionSegments = segments.flatMap((segment, i) => {
+    if (
+      i !== 2 ||
+      groups.length === 1 ||
+      segment.text !== comparisonScript(match, settings)
+    )
+      return [segment];
+    return groups.map((group, index) => ({
+      frames:
+        Math.floor((segment.frames * (index + 1)) / groups.length) -
+        Math.floor((segment.frames * index) / groups.length),
+      text:
+        group.label +
+        "：" +
+        (group.pair?.map((p) => p.name).join(" vs ") || "对位待修正") +
+        "。" +
+        (group.position && group.position >= 4
+          ? "助攻、参战、眼位、眩晕和治疗，看辅助的本场贡献。"
+          : "经济、经验、输出与推塔，看同位置的本场表现。"),
+    }));
+  });
+  return { match, settings, segments, captions: makeCaptions(captionSegments) };
 }
 export function srt(captions: Caption[]) {
   const time = (frames: number) => {

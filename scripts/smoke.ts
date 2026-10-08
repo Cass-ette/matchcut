@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { browserPath } from "../server/render";
+import { comparisons } from "../src/domain";
 
 const base = "http://127.0.0.1:4317";
 const folder = "output/verification";
@@ -30,6 +31,62 @@ try {
   await page.getByRole("button", { name: /烈焰对决/ }).click();
   await page.getByLabel("栏目名称", { exact: true }).fill("赛后雷达");
   await page.getByLabel("导出清晰度").selectOption("1080");
+  await page.getByLabel("雷达对比模式").selectOption("positions");
+  await page.getByLabel("展示位置").selectOption("all");
+  assert.equal(await page.locator(".matchup-list button").count(), 5);
+  assert.match(
+    await page.locator(".matchup-list").innerText(),
+    /Mikoto vs bzm/,
+  );
+  await page.getByLabel("雷达对比模式").selectOption("damage");
+  assert.equal(await page.locator(".matchup-list button").count(), 1);
+  assert.match(
+    await page.locator(".matchup-list").innerText(),
+    /skiter vs Pure/,
+  );
+  await page.getByLabel("雷达对比模式").selectOption("positions");
+  await page.getByLabel("展示位置").selectOption("2");
+  assert.equal(await page.locator(".matchup-list button").count(), 1);
+  assert.match(
+    await page.locator(".matchup-list").innerText(),
+    /Mikoto vs bzm/,
+  );
+  await page.locator(".position-editor summary").click();
+  await page
+    .getByLabel("Aurora Gaming skiter 位置", { exact: true })
+    .selectOption("2");
+  assert.match(
+    await page.locator(".matchup-list").innerText(),
+    /skiter vs bzm/,
+  );
+  assert.equal(
+    await page
+      .getByLabel("Aurora Gaming Mikoto 位置", { exact: true })
+      .inputValue(),
+    "1",
+  );
+  await page
+    .getByLabel("Aurora Gaming skiter 位置", { exact: true })
+    .selectOption("0");
+  assert.ok(
+    await page
+      .getByRole("button", { name: "一键生成视频", exact: true })
+      .isDisabled(),
+  );
+  await page.getByRole("button", { name: "恢复数据源估计" }).click();
+  assert.ok(
+    await page
+      .getByRole("button", { name: "一键生成视频", exact: true })
+      .isEnabled(),
+  );
+  await page.locator(".position-editor summary").click();
+  await page.getByLabel("展示位置").selectOption("all");
+  await page.locator(".matchup-list button").nth(4).click();
+  await page.screenshot({
+    path: folder + "/support-preview.png",
+    fullPage: true,
+  });
+  await page.locator(".scene-strip button").nth(0).click();
   assert.match(
     await page.locator(".preview-meta").innerText(),
     /16:9.*1920 × 1080/s,
@@ -46,6 +103,9 @@ try {
     fullPage: true,
   });
   await page.getByRole("button", { name: /烈焰对决/ }).click();
+  await page.getByRole("button", { name: /黑金荣耀/ }).click();
+  await page.getByLabel("特效强度").selectOption("restrained");
+  await page.getByLabel("特效强度").selectOption("arena");
   await page.getByRole("button", { name: "标题与文案", exact: true }).click();
   const headline = page.getByLabel("开场标题", { exact: true });
   const original = await headline.inputValue();
@@ -140,12 +200,21 @@ try {
       return t;
     });
     const radarStart = (segments[0].frames + segments[1].frames) / 30;
+    const matchups = comparisons(current.props.match, current.props.settings);
+    assert.equal(matchups.length, 5);
+    const chapterDuration = segments[2].frames / 30 / matchups.length;
     const times = [
       sceneTimes[0],
       sceneTimes[1],
-      sceneTimes[2],
-      radarStart + segments[2].frames / 90 + 2.5,
-      radarStart + (2 * segments[2].frames) / 90 + 2.5,
+      ...matchups.flatMap((_, index) =>
+        [0, 1, 2].map(
+          (phase) =>
+            radarStart +
+            chapterDuration * index +
+            (chapterDuration / 3) * phase +
+            2.5,
+        ),
+      ),
       sceneTimes[3],
       sceneTimes[4],
     ];
@@ -164,7 +233,7 @@ try {
       ]),
     );
     console.log(
-      "Verified 1920×1080 / 30 fps / no audio. Seven scene frames saved.",
+      "Verified 1920×1080 / 30 fps / no audio. All five role chapters and four other scenes saved.",
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });

@@ -1175,6 +1175,122 @@ select {
 .spin {
   animation: spin 1s linear infinite;
 }
+.matchups-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.comparison-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.comparison-controls select {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+}
+.matchup-list {
+  display: grid;
+  gap: 5px;
+}
+.matchup-list button {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  text-align: left;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: #0c111a;
+  border-left: 2px solid #445069;
+}
+.matchup-list button:hover {
+  border-left-color: var(--accent);
+}
+.matchup-list span {
+  color: #b4c0d0;
+  font-size: 11px;
+}
+.matchup-list b {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.matchup-list small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.position-editor {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 13px;
+}
+.position-editor summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #c3ccda;
+}
+.position-editor summary span {
+  margin-left: 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.position-editor p,
+.comparison-note {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.9;
+}
+.comparison-note {
+  margin: 12px 0 0;
+}
+.position-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.position-teams > div > b {
+  display: block;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.position-teams label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+.position-teams label > span {
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.position-teams small {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.position-teams select {
+  width: 128px;
+  font-size: 10px;
+  padding: 8px 5px;
+}
+@media (max-width: 760px) {
+  .matchup-list button {
+    grid-template-columns: 110px minmax(0, 1fr);
+  }
+  .matchup-list small {
+    grid-column: 1 / -1;
+  }
+  .position-teams {
+    grid-template-columns: 1fr;
+  }
+  .comparison-controls {
+    flex-direction: column;
+  }
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);

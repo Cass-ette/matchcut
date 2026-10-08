@@ -27,6 +27,11 @@
         "damage": 52413,
         "tower": 9034,
         "lastHits": 520,
+        "positionEstimate": 1,
+        "obs": 0,
+        "sentries": 0,
+        "stuns": 43.16556,
+        "healing": 0,
         "artwork": "/assets/renders/70.png"
       },
       {
@@ -43,7 +48,13 @@
         "xpm": 995,
         "damage": 37050,
         "tower": 2354,
-        "lastHits": 424
+        "lastHits": 424,
+        "positionEstimate": 2,
+        "obs": 1,
+        "sentries": 0,
+        "stuns": 32.800842,
+        "healing": 4,
+        "artwork": "/assets/renders/107.png"
       },
       {
         "slot": 2,
@@ -59,7 +70,13 @@
         "xpm": 763,
         "damage": 30511,
         "tower": 8550,
-        "lastHits": 392
+        "lastHits": 392,
+        "positionEstimate": 3,
+        "obs": 0,
+        "sentries": 3,
+        "stuns": 60.932236,
+        "healing": 0,
+        "artwork": "/assets/renders/33.png"
       },
       {
         "slot": 3,
@@ -75,7 +92,13 @@
         "xpm": 549,
         "damage": 32035,
         "tower": 5,
-        "lastHits": 30
+        "lastHits": 30,
+        "positionEstimate": 4,
+        "obs": 9,
+        "sentries": 14,
+        "stuns": 131.39981,
+        "healing": 320,
+        "artwork": "/assets/renders/88.png"
       },
       {
         "slot": 4,
@@ -91,7 +114,13 @@
         "xpm": 616,
         "damage": 17661,
         "tower": 2861,
-        "lastHits": 165
+        "lastHits": 165,
+        "positionEstimate": 5,
+        "obs": 16,
+        "sentries": 31,
+        "stuns": 5.333711,
+        "healing": 21292,
+        "artwork": "/assets/renders/37.png"
       },
       {
         "slot": 128,
@@ -107,7 +136,13 @@
         "xpm": 625,
         "damage": 20715,
         "tower": 460,
-        "lastHits": 316
+        "lastHits": 316,
+        "positionEstimate": 3,
+        "obs": 0,
+        "sentries": 0,
+        "stuns": 20.532793,
+        "healing": 0,
+        "artwork": "/assets/renders/60.png"
       },
       {
         "slot": 129,
@@ -123,7 +158,13 @@
         "xpm": 619,
         "damage": 23683,
         "tower": 367,
-        "lastHits": 151
+        "lastHits": 151,
+        "positionEstimate": 4,
+        "obs": 6,
+        "sentries": 10,
+        "stuns": 66.16598,
+        "healing": 0,
+        "artwork": "/assets/renders/123.png"
       },
       {
         "slot": 130,
@@ -139,7 +180,13 @@
         "xpm": 663,
         "damage": 33290,
         "tower": 138,
-        "lastHits": 109
+        "lastHits": 109,
+        "positionEstimate": 5,
+        "obs": 17,
+        "sentries": 34,
+        "stuns": 23.39877,
+        "healing": 1044,
+        "artwork": "/assets/renders/105.png"
       },
       {
         "slot": 131,
@@ -155,7 +202,13 @@
         "xpm": 1048,
         "damage": 43493,
         "tower": 700,
-        "lastHits": 510
+        "lastHits": 510,
+        "positionEstimate": 2,
+        "obs": 1,
+        "sentries": 1,
+        "stuns": 82.96657,
+        "healing": 285,
+        "artwork": "/assets/renders/106.png"
       },
       {
         "slot": 132,
@@ -172,6 +225,11 @@
         "damage": 55502,
         "tower": 3936,
         "lastHits": 733,
+        "positionEstimate": 1,
+        "obs": 0,
+        "sentries": 0,
+        "stuns": 11.266456,
+        "healing": 0,
         "artwork": "/assets/renders/145.png"
       }
     ],
@@ -402,6 +460,7 @@
   },
   "settings": {
     "theme": "ember",
+    "effects": "arena",
     "accent": "#ff6138",
     "secondary": "#50d9ed",
     "brand": "赛后雷达",
@@ -412,11 +471,13 @@
     "scripts": [
       "54:04，Aurora Gaming 拿下胜利。人头比 44 : 42。",
       "经济优势曾易手。天辉最大领先 9,383，夜魇最大领先 5,782。",
-      "skiter 与 Pure：双方伤害最高选手的本场对比。各轴为相对数值，非能力评分。",
+      "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。",
       "Pure 打出 55,502 点英雄伤害，全场第一。输出量不等于全部贡献。",
       "本局胜者：Aurora Gaming。下一场，继续见。"
     ],
-    "resolution": "1080"
+    "resolution": "1080",
+    "radarMode": "positions",
+    "radarPosition": "all"
   },
   "segments": [
     {
@@ -428,8 +489,8 @@
       "frames": 300
     },
     {
-      "text": "skiter 与 Pure：双方伤害最高选手的本场对比。各轴为相对数值，非能力评分。",
-      "frames": 720
+      "text": "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。",
+      "frames": 2700
     },
     {
       "text": "Pure 打出 55,502 点英雄伤害，全场第一。输出量不等于全部贡献。",
@@ -472,49 +533,169 @@
       "end": 520
     },
     {
-      "text": "skiter 与 Pure：双方伤害最高选手的本场对比。",
+      "text": "一号位 · 核心：skiter vs Pure。",
       "start": 540,
-      "end": 1007
+      "end": 811
     },
     {
-      "text": "各轴为相对数值，",
-      "start": 1007,
-      "end": 1140
+      "text": "经济、",
+      "start": 811,
+      "end": 845
     },
     {
-      "text": "非能力评分。",
-      "start": 1140,
-      "end": 1240
+      "text": "经验、",
+      "start": 845,
+      "end": 879
+    },
+    {
+      "text": "输出与推塔，",
+      "start": 879,
+      "end": 947
+    },
+    {
+      "text": "看同位置的本场表现。",
+      "start": 947,
+      "end": 1060
+    },
+    {
+      "text": "二号位 · 中单：Mikoto vs bzm。",
+      "start": 1080,
+      "end": 1346
+    },
+    {
+      "text": "经济、",
+      "start": 1346,
+      "end": 1381
+    },
+    {
+      "text": "经验、",
+      "start": 1381,
+      "end": 1416
+    },
+    {
+      "text": "输出与推塔，",
+      "start": 1416,
+      "end": 1485
+    },
+    {
+      "text": "看同位置的本场表现。",
+      "start": 1485,
+      "end": 1600
+    },
+    {
+      "text": "三号位 · 劣势路：Ws` vs 33。",
+      "start": 1620,
+      "end": 1868
+    },
+    {
+      "text": "经济、",
+      "start": 1868,
+      "end": 1905
+    },
+    {
+      "text": "经验、",
+      "start": 1905,
+      "end": 1942
+    },
+    {
+      "text": "输出与推塔，",
+      "start": 1942,
+      "end": 2016
+    },
+    {
+      "text": "看同位置的本场表现。",
+      "start": 2016,
+      "end": 2140
+    },
+    {
+      "text": "四号位 · 游走：Mira vs Ari。",
+      "start": 2160,
+      "end": 2403
+    },
+    {
+      "text": "助攻、",
+      "start": 2403,
+      "end": 2438
+    },
+    {
+      "text": "参战、",
+      "start": 2438,
+      "end": 2473
+    },
+    {
+      "text": "眼位、",
+      "start": 2473,
+      "end": 2508
+    },
+    {
+      "text": "眩晕和治疗，",
+      "start": 2508,
+      "end": 2577
+    },
+    {
+      "text": "看辅助的本场贡献。",
+      "start": 2577,
+      "end": 2680
+    },
+    {
+      "text": "五号位 · 辅助：kaori vs Whitemon。",
+      "start": 2700,
+      "end": 2975
+    },
+    {
+      "text": "助攻、",
+      "start": 2975,
+      "end": 3006
+    },
+    {
+      "text": "参战、",
+      "start": 3006,
+      "end": 3037
+    },
+    {
+      "text": "眼位、",
+      "start": 3037,
+      "end": 3068
+    },
+    {
+      "text": "眩晕和治疗，",
+      "start": 3068,
+      "end": 3129
+    },
+    {
+      "text": "看辅助的本场贡献。",
+      "start": 3129,
+      "end": 3220
     },
     {
       "text": "Pure 打出 55,502 点英雄伤害，",
-      "start": 1260,
-      "end": 1419
+      "start": 3240,
+      "end": 3399
     },
     {
       "text": "全场第一。",
-      "start": 1419,
-      "end": 1457
+      "start": 3399,
+      "end": 3437
     },
     {
       "text": "输出量不等于全部贡献。",
-      "start": 1457,
-      "end": 1540
+      "start": 3437,
+      "end": 3520
     },
     {
       "text": "本局胜者：Aurora Gaming。",
-      "start": 1560,
-      "end": 1694
+      "start": 3540,
+      "end": 3674
     },
     {
       "text": "下一场，",
-      "start": 1694,
-      "end": 1722
+      "start": 3674,
+      "end": 3702
     },
     {
       "text": "继续见。",
-      "start": 1722,
-      "end": 1750
+      "start": 3702,
+      "end": 3730
     }
   ]
 }

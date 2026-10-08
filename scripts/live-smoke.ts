@@ -28,6 +28,9 @@ const settings = {
   secondary: "#e2bd72",
   headline: "旧比赛标题不应混入",
   scripts: Array(5).fill("旧比赛文案不应混入"),
+  radarMode: "positions",
+  radarPosition: "4",
+  positionOverrides: { matchId: defaults.match.id, roles: { "0": 4, "3": 1 } },
 };
 let job = await api("/api/jobs", {
   method: "POST",
@@ -57,6 +60,10 @@ assert.ok(
 );
 assert.equal(job.props.settings.theme, "glacier");
 assert.equal(job.props.match.players.length, 10);
+assert.equal(job.props.settings.radarMode, "positions");
+assert.equal(job.props.settings.radarPosition, "4");
+assert.equal(job.props.settings.positionOverrides, undefined);
+assert.match(job.props.settings.scripts[2], /四号位/);
 const metadata = JSON.parse(
   execFileSync(
     "ffprobe",
