@@ -97,6 +97,8 @@ test("silent captions have valid intervals within the film and readable scene le
   assert.ok(totalFrames(slow.segments) > total);
 });
 test("subtitle wrapping never splits a score, a thousands-grouped value, or a Latin word", () => {
+  const radarSentence = "skiter 与 Pure：双方伤害最高选手的本场对比。";
+  assert.deepEqual(captionLines(radarSentence), [radarSentence]);
   const lines = captionLines(
     "54:04，Aurora Gaming 获胜。天辉最大领先 9,383，Pure 打出 55,502 点英雄伤害。",
   );

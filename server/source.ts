@@ -1,6 +1,11 @@
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_MATCH, normalizeMatch, type MatchData } from "../src/domain";
+import {
+  DEFAULT_MATCH,
+  getFocus,
+  normalizeMatch,
+  type MatchData,
+} from "../src/domain";
 
 const root = process.cwd();
 const cache = path.join(root, "data/cache");
@@ -13,6 +18,7 @@ let requestChain = Promise.resolve();
 export async function initializeData() {
   await mkdir(cache, { recursive: true });
   await mkdir(path.join(root, "public/assets/heroes"), { recursive: true });
+  await mkdir(path.join(root, "public/assets/renders"), { recursive: true });
 }
 async function exists(p: string) {
   try {
@@ -85,6 +91,36 @@ async function requestJson(endpoint: string): Promise<any> {
 async function heroConstants(): Promise<Record<string, any>> {
   return JSON.parse(await readFile(path.join(fixtures, "heroes.json"), "utf8"));
 }
+const artworkRetryAfter = new Map<number, number>();
+async function ensureArtwork(m: MatchData, heroes: Record<string, any>) {
+  for (const p of getFocus(m)) {
+    const relative = "/assets/renders/" + p.heroId + ".png";
+    const dest = path.join(root, "public", relative);
+    if (await exists(dest)) {
+      p.artwork = relative;
+      continue;
+    }
+    if ((artworkRetryAfter.get(p.heroId) || 0) > Date.now()) continue;
+    const slug = heroes[String(p.heroId)]?.name?.replace(/^npc_dota_hero_/, "");
+    if (typeof slug !== "string" || !/^[a-z0-9_]+$/.test(slug)) continue;
+    try {
+      const r = await fetch(
+        "https://cdn.cloudflare.steamstatic.com/apps/dota2/videos/dota_react/heroes/renders/" +
+          slug +
+          ".png",
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (r.ok && r.headers.get("content-type")?.startsWith("image/")) {
+        await writeFile(dest, Buffer.from(await r.arrayBuffer()));
+        p.artwork = relative;
+        continue;
+      }
+    } catch {
+      /* Portrait remains available when optional render art is unavailable. */
+    }
+    artworkRetryAfter.set(p.heroId, Date.now() + 86400000);
+  }
+}
 async function ensurePortraits(m: MatchData, heroes: Record<string, any>) {
   for (const p of m.players) {
     const dest = path.join(root, "public/assets/heroes", p.heroId + ".png");
@@ -136,6 +172,7 @@ export async function loadMatch(
   if (match.id !== id) throw new Error("返回的比赛编号不一致，已停止生成。");
   if (!cached) await writeFile(file, JSON.stringify({ fetchedAt, raw }));
   await ensurePortraits(match, hero);
+  await ensureArtwork(match, hero);
   return { match, raw, cached };
 }
 export async function recentMatches(): Promise<any[]> {

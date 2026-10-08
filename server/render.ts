@@ -9,6 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   FPS,
+  VIDEO_WIDTH,
+  VIDEO_HEIGHT,
   MatchData,
   Settings,
   VideoProps,
@@ -29,6 +31,8 @@ export type Job = {
   error?: string;
   files?: Record<string, string>;
   props?: VideoProps;
+  width?: number;
+  height?: number;
   warnings: string[];
 };
 export async function browserPath(): Promise<string | undefined> {
@@ -89,6 +93,8 @@ export async function runRender(
     const props = previewProps(match, settings);
     const { segments, captions } = props;
     job.props = props;
+    job.width = settings.resolution === "720" ? 1280 : VIDEO_WIDTH;
+    job.height = settings.resolution === "720" ? 720 : VIDEO_HEIGHT;
     job.message = "准备视频模板";
     job.progress = 15;
     await update();
@@ -146,7 +152,10 @@ export async function runRender(
       path.join(folder, "project.json"),
       JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
+          aspectRatio: "16:9",
+          width: job.width,
+          height: job.height,
           matchId: match.id,
           settings,
           segments,

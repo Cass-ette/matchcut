@@ -33,6 +33,8 @@ import {
 import {
   DEFAULT_MATCH,
   FPS,
+  VIDEO_WIDTH,
+  VIDEO_HEIGHT,
   MatchData,
   SCENES,
   Settings,
@@ -57,6 +59,8 @@ type Job = {
   files?: Record<string, string>;
   createdAt: string;
   props?: VideoProps;
+  width?: number;
+  height?: number;
 };
 async function api<T = any>(url: string, options?: RequestInit): Promise<T> {
   const r = await fetch(url, {
@@ -80,27 +84,27 @@ const presentation = (s: Settings) => ({
 const themes = [
   {
     id: "ember",
-    name: "夜场橙",
-    description: "清晰、锐利、有力量",
-    a: "#ff8652",
-    b: "#76d6c7",
-    bg: "#101719",
+    name: "烈焰对决",
+    description: "炽橙 × 冰青 · 主场对抗",
+    a: "#ff6138",
+    b: "#50d9ed",
+    bg: "#080a10",
   },
   {
     id: "glacier",
-    name: "冰川蓝",
-    description: "冷静的数据观察",
-    a: "#6dc9ff",
-    b: "#e2bd72",
-    bg: "#0d1e2b",
+    name: "极地赛场",
+    description: "电蓝 × 亮金 · 冷光舞台",
+    a: "#53baff",
+    b: "#ffcf5a",
+    bg: "#070d18",
   },
   {
     id: "paper",
-    name: "纸上比赛",
-    description: "克制的编辑部风格",
-    a: "#cc5238",
-    b: "#258a80",
-    bg: "#f2eee5",
+    name: "霓虹交锋",
+    description: "紫电 × 酸绿 · 夜场聚焦",
+    a: "#c78aff",
+    b: "#c6f45e",
+    bg: "#100b18",
   },
 ] as const;
 function App() {
@@ -296,7 +300,8 @@ function App() {
       [
         JSON.stringify(
           {
-            schemaVersion: 1,
+            schemaVersion: 2,
+            aspectRatio: "16:9",
             matchId: match.id,
             settings,
             source,
@@ -393,11 +398,11 @@ function App() {
       </header>
       <div className="page-intro">
         <div>
-          <div className="eyebrow">YOUR NEXT MATCH STORY</div>
+          <div className="eyebrow">POST-MATCH PRODUCTION / DOTA 2</div>
           <h1>
-            把一场比赛，变成一个好故事<span>。</span>
+            赛后，数据上场<span>。</span>
           </h1>
-          <p>选好比赛，其余交给模板。你的下一条赛后视频，从这里开始。</p>
+          <p>选手雷达 · 经济走势 · 伤害排行。选一场比赛，生成横屏赛后视频。</p>
         </div>
         <div className="workspace-label">
           <Film size={17} />
@@ -566,7 +571,7 @@ function App() {
           </div>
           <div className="section-divider" />
           <div className="subheading">
-            <span>这条视频会讲什么</span>
+            <span>节目编排</span>
             <span>5 幕</span>
           </div>
           <div className="story-list">
@@ -584,7 +589,7 @@ function App() {
                       [
                         "最终赛果与看点",
                         "优势随时间的变化",
-                        "双人六维数据对比",
+                        "选手聚焦 → 双人对比",
                         "全场输出前五",
                         "结果与数据出处",
                       ][i]
@@ -619,8 +624,8 @@ function App() {
               <h2>成片预览</h2>
             </div>
             <span className="preview-meta">
-              9:16 <span>·</span>{" "}
-              {settings.resolution === "1080" ? "1080 × 1920" : "720 × 1280"}
+              16:9 <span>·</span>{" "}
+              {settings.resolution === "1080" ? "1920 × 1080" : "1280 × 720"}
             </span>
           </div>
           <div className="preview-stage">
@@ -636,15 +641,15 @@ function App() {
                 inputProps={props}
                 durationInFrames={frames}
                 fps={FPS}
-                compositionWidth={1080}
-                compositionHeight={1920}
+                compositionWidth={VIDEO_WIDTH}
+                compositionHeight={VIDEO_HEIGHT}
                 style={{ width: "100%" }}
                 controls
                 initialFrame={65}
                 loop
                 showVolumeControls={false}
                 clickToPlay
-                doubleClickToFullscreen={false}
+                doubleClickToFullscreen
               />
             </div>
             <div className="stage-bottom">
@@ -668,7 +673,7 @@ function App() {
           </div>
           <div className="export-bar">
             <div>
-              <b>{busy ? "正在制作你的下一条视频" : "准备好，让比赛开口。"}</b>
+              <b>{busy ? "正在渲染赛后节目" : "导出横屏成片"}</b>
               <span>
                 {busy ? job?.message : "MP4 视频 + 封面 + 字幕 + 数据档案"}
               </span>
@@ -681,7 +686,7 @@ function App() {
               {busy ? (
                 <LoaderCircle size={18} className="spin" />
               ) : (
-                <WandSparkles size={18} />
+                <Clapperboard size={18} />
               )}{" "}
               {busy ? "生成中 " + job?.progress + "%" : "一键生成视频"}
               {!busy && <ArrowRight size={17} />}
@@ -736,7 +741,7 @@ function App() {
         <aside className="inspector" id="inspector">
           <div className="panel-title">
             <span className="step-dot">3</span>
-            <h2>让它像你的作品</h2>
+            <h2>节目设置</h2>
             <SlidersHorizontal size={16} />
           </div>
           <div className="inspector-tabs">
@@ -977,7 +982,9 @@ function App() {
                   <img src={j.files?.["cover.png"]} />
                   <div>
                     <b>{j.title}</b>
-                    <span>比赛 #{j.matchId}</span>
+                    <span>
+                      {j.width ? "16:9 · " : "旧版竖屏 · "}比赛 #{j.matchId}
+                    </span>
                     <small>
                       {new Date(j.createdAt).toLocaleString("zh-CN")}
                     </small>

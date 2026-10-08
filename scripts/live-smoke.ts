@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 const base = "http://127.0.0.1:4317";
 async function api(url: string, options?: RequestInit) {
   const r = await fetch(base + url, {
@@ -55,6 +57,24 @@ assert.ok(
 );
 assert.equal(job.props.settings.theme, "glacier");
 assert.equal(job.props.match.players.length, 10);
+const metadata = JSON.parse(
+  execFileSync(
+    "ffprobe",
+    [
+      "-v",
+      "error",
+      "-show_streams",
+      "-of",
+      "json",
+      path.join(process.cwd(), job.files["matchcut.mp4"]),
+    ],
+    { encoding: "utf8" },
+  ),
+);
+assert.equal(metadata.streams.length, 1);
+assert.equal(metadata.streams[0].codec_type, "video");
+assert.equal(metadata.streams[0].width, 1280);
+assert.equal(metadata.streams[0].height, 720);
 await mkdir("output/verification", { recursive: true });
 await writeFile(
   "output/verification/live-job.json",

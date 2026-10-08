@@ -15,6 +15,7 @@
     "test:live": "tsx scripts/live-smoke.ts"
   },
   "dependencies": {
+    "@fontsource/orbitron": "^5.2.8",
     "@remotion/bundler": "4.0.534",
     "@remotion/cli": "4.0.534",
     "@remotion/player": "4.0.534",

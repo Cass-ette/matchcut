@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const FPS = 30;
+export const VIDEO_WIDTH = 1920;
+export const VIDEO_HEIGHT = 1080;
 export const DEFAULT_MATCH = "9035078952";
 export const SCENES = [
   "赛果开场",
@@ -12,11 +14,11 @@ export const SCENES = [
 export const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const settingsSchema = z.object({
   theme: z.enum(["ember", "glacier", "paper"]).default("ember"),
-  accent: colorSchema.default("#ff8652"),
-  secondary: colorSchema.default("#76d6c7"),
-  brand: z.string().trim().min(1).max(24).default("赛后一分钟"),
+  accent: colorSchema.default("#ff6138"),
+  secondary: colorSchema.default("#50d9ed"),
+  brand: z.string().trim().min(1).max(24).default("赛后雷达"),
   headline: z.string().trim().min(1).max(44),
-  outro: z.string().trim().max(56).default("数据看比赛，下一场见。"),
+  outro: z.string().trim().max(56).default("下一场，继续见。"),
   pace: z.enum(["snappy", "standard", "relaxed"]).default("standard"),
   captions: z.boolean().default(true),
   scripts: z.array(z.string().trim().min(1).max(240)).length(5),
@@ -29,6 +31,7 @@ export type PlayerData = {
   hero: string;
   heroId: number;
   image: string;
+  artwork?: string;
   side: "radiant" | "dire";
   kills: number;
   deaths: number;
@@ -236,7 +239,7 @@ export function defaultSettings(m: MatchData): Settings {
         " 打出 " +
         num(f.top.damage) +
         " 点英雄伤害，全场第一。输出量不等于全部贡献。",
-      "本局胜者：" + f.winner + "。数据看比赛，下一场见。",
+      "本局胜者：" + f.winner + "。下一场，继续见。",
     ],
   });
 }
@@ -276,7 +279,7 @@ export function captionLines(text: string): string[] {
         (n, c) => n + (/[\x00-\x7F]/.test(c) ? 0.55 : 1),
         0,
       );
-      if (width + w > 21 && line.trim() && !/^[，。！？；、!?;]$/.test(token)) {
+      if (width + w > 44 && line.trim() && !/^[，。！？；、!?;]$/.test(token)) {
         lines.push(line.trim());
         line = "";
         width = 0;
@@ -309,7 +312,7 @@ export function makeCaptions(segments: Segment[]): Caption[] {
   return result;
 }
 export function previewProps(match: MatchData, settings: Settings): VideoProps {
-  const base = [6, 9, 11, 9, 6];
+  const base = [7, 10, 24, 10, 7];
   const speed = { snappy: 0.82, standard: 1, relaxed: 1.2 }[settings.pace];
   const segments = settings.scripts.map((text, i) => ({
     text,

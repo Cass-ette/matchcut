@@ -6,3 +6,8 @@ data/cache/
 data/preferences.json
 .DS_Store
 *.log
+# Downloaded artwork is a local cache; the bundled sample remains tracked.
+/public/assets/heroes/*.png
+/public/assets/renders/*.png
+!/public/assets/renders/70.png
+!/public/assets/renders/145.png

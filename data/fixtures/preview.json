@@ -26,7 +26,8 @@
         "xpm": 1218,
         "damage": 52413,
         "tower": 9034,
-        "lastHits": 520
+        "lastHits": 520,
+        "artwork": "/assets/renders/70.png"
       },
       {
         "slot": 1,
@@ -170,7 +171,8 @@
         "xpm": 1105,
         "damage": 55502,
         "tower": 3936,
-        "lastHits": 733
+        "lastHits": 733,
+        "artwork": "/assets/renders/145.png"
       }
     ],
     "gold": [
@@ -400,11 +402,11 @@
   },
   "settings": {
     "theme": "ember",
-    "accent": "#ff8652",
-    "secondary": "#76d6c7",
-    "brand": "赛后一分钟",
+    "accent": "#ff6138",
+    "secondary": "#50d9ed",
+    "brand": "赛后雷达",
     "headline": "落后 5.8k，依然拿下",
-    "outro": "数据看比赛，下一场见。",
+    "outro": "下一场，继续见。",
     "pace": "standard",
     "captions": true,
     "scripts": [
@@ -412,7 +414,7 @@
       "经济优势曾易手。天辉最大领先 9,383，夜魇最大领先 5,782。",
       "skiter 与 Pure：双方伤害最高选手的本场对比。各轴为相对数值，非能力评分。",
       "Pure 打出 55,502 点英雄伤害，全场第一。输出量不等于全部贡献。",
-      "本局胜者：Aurora Gaming。数据看比赛，下一场见。"
+      "本局胜者：Aurora Gaming。下一场，继续见。"
     ],
     "resolution": "1080"
   },
@@ -423,19 +425,19 @@
     },
     {
       "text": "经济优势曾易手。天辉最大领先 9,383，夜魇最大领先 5,782。",
-      "frames": 270
+      "frames": 300
     },
     {
       "text": "skiter 与 Pure：双方伤害最高选手的本场对比。各轴为相对数值，非能力评分。",
-      "frames": 330
+      "frames": 720
     },
     {
       "text": "Pure 打出 55,502 点英雄伤害，全场第一。输出量不等于全部贡献。",
-      "frames": 270
+      "frames": 300
     },
     {
-      "text": "本局胜者：Aurora Gaming。数据看比赛，下一场见。",
-      "frames": 194
+      "text": "本局胜者：Aurora Gaming。下一场，继续见。",
+      "frames": 210
     }
   ],
   "captions": [
@@ -457,67 +459,62 @@
     {
       "text": "经济优势曾易手。",
       "start": 240,
-      "end": 299
+      "end": 306
     },
     {
       "text": "天辉最大领先 9,383，",
-      "start": 299,
-      "end": 395
+      "start": 306,
+      "end": 413
     },
     {
       "text": "夜魇最大领先 5,782。",
-      "start": 395,
-      "end": 490
+      "start": 413,
+      "end": 520
     },
     {
-      "text": "skiter 与 Pure：双方伤害最高选手的本场对",
-      "start": 510,
-      "end": 702
-    },
-    {
-      "text": "比。",
-      "start": 702,
-      "end": 717
+      "text": "skiter 与 Pure：双方伤害最高选手的本场对比。",
+      "start": 540,
+      "end": 1007
     },
     {
       "text": "各轴为相对数值，",
-      "start": 717,
-      "end": 776
+      "start": 1007,
+      "end": 1140
     },
     {
       "text": "非能力评分。",
-      "start": 776,
-      "end": 820
+      "start": 1140,
+      "end": 1240
     },
     {
       "text": "Pure 打出 55,502 点英雄伤害，",
-      "start": 840,
-      "end": 982
+      "start": 1260,
+      "end": 1419
     },
     {
       "text": "全场第一。",
-      "start": 982,
-      "end": 1016
+      "start": 1419,
+      "end": 1457
     },
     {
       "text": "输出量不等于全部贡献。",
-      "start": 1016,
-      "end": 1090
+      "start": 1457,
+      "end": 1540
     },
     {
       "text": "本局胜者：Aurora Gaming。",
-      "start": 1110,
-      "end": 1220
+      "start": 1560,
+      "end": 1694
     },
     {
-      "text": "数据看比赛，",
-      "start": 1220,
-      "end": 1255
+      "text": "下一场，",
+      "start": 1694,
+      "end": 1722
     },
     {
-      "text": "下一场见。",
-      "start": 1255,
-      "end": 1284
+      "text": "继续见。",
+      "start": 1722,
+      "end": 1750
     }
   ]
 }

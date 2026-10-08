@@ -256,17 +256,13 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) =>
-    res
-      .status(err instanceof z.ZodError ? 400 : 422)
-      .json({
-        error:
-          err instanceof z.ZodError
-            ? "输入格式不正确：" +
-              err.issues
-                .map((i) => i.path.join(".") + " " + i.message)
-                .join("；")
-            : err.message || "操作失败。",
-      }),
+    res.status(err instanceof z.ZodError ? 400 : 422).json({
+      error:
+        err instanceof z.ZodError
+          ? "输入格式不正确：" +
+            err.issues.map((i) => i.path.join(".") + " " + i.message).join("；")
+          : err.message || "操作失败。",
+    }),
 );
 let built = false;
 try {

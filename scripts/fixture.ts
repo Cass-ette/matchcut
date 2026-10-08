@@ -1,10 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { normalizeMatch, defaultSettings, previewProps } from "../src/domain";
-const fixture = JSON.parse(
-  await readFile("data/fixtures/9035078952.json", "utf8"),
-);
-const heroes = JSON.parse(await readFile("data/fixtures/heroes.json", "utf8"));
-const match = normalizeMatch(fixture.raw, heroes, fixture.fetchedAt);
+import { DEFAULT_MATCH, defaultSettings, previewProps } from "../src/domain";
+import { initializeData, loadMatch } from "../server/source";
+await initializeData();
+const { match } = await loadMatch(DEFAULT_MATCH);
 await writeFile(
   "data/fixtures/preview.json",
   JSON.stringify(previewProps(match, defaultSettings(match)), null, 2),
