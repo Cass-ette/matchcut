@@ -137,7 +137,12 @@ function Portrait({
     );
   if (!image && photo)
     return (
-      <PlayerPlaceholder name={p.name} compact style={{ width, height }} />
+      <PlayerPlaceholder
+        name={p.name}
+        compact
+        inVideo
+        style={{ width, height }}
+      />
     );
   if (!image)
     return (
@@ -205,7 +210,7 @@ function HeroArt({ p, style }: { p: PlayerData; style?: React.CSSProperties }) {
           }}
         />
       ) : photo ? (
-        <PlayerPlaceholder name={p.name} style={{ maskImage }} />
+        <PlayerPlaceholder name={p.name} inVideo style={{ maskImage }} />
       ) : (
         <div
           data-hero-art
