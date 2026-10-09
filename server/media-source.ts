@@ -11,7 +11,14 @@ import { createHash, randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { z } from "zod";
 import type { Game, MatchData } from "../src/domain";
-import { mediaKey, type MediaItem, type MediaSlot } from "../src/media";
+import {
+  mediaKey,
+  exactLogo,
+  type MediaItem,
+  type MediaSlot,
+  type LogoSource,
+} from "../src/media";
+import { LogoCatalog, logoCatalog } from "./logo-catalog";
 
 export const mediaGameSchema = z.enum(["dota2", "lol"]);
 export const mediaSlotSchema = z.enum(["logo", "portrait", "artwork"]);
@@ -40,6 +47,9 @@ const registrySchema = z.object({
       name: nameSchema,
       aliases: z.array(nameSchema),
       images: imagesSchema,
+      logoSource: z
+        .object({ name: z.string(), path: z.string(), url: z.string().url() })
+        .optional(),
     }),
   ),
 });
@@ -61,7 +71,10 @@ const exists = async (file: string) => {
 export class MediaLibrary {
   private queue: Promise<unknown> = Promise.resolve();
   private file: string;
-  constructor(private root: string) {
+  constructor(
+    private root: string,
+    private catalog = new LogoCatalog(root),
+  ) {
     this.file = path.join(root, "data/media-library.json");
   }
 
@@ -152,10 +165,21 @@ export class MediaLibrary {
           overrides: [],
         });
       }
-    return [...items.values()].map((t) => ({
-      ...t,
-      images: { ...t.defaults, ...t.images },
-    }));
+    const catalog = await this.catalog.local();
+    return [...items.values()].map((t) => {
+      const automaticLogo = !t.defaults.logo
+        ? exactLogo(catalog?.logos || [], game, [t.name, ...t.aliases])
+        : undefined;
+      const defaults = automaticLogo
+        ? { logo: `/api/logo-catalog/image/${automaticLogo.sha}` }
+        : t.defaults;
+      return {
+        ...t,
+        defaults,
+        automaticLogo,
+        images: { ...defaults, ...t.images },
+      };
+    });
   }
   async list(game: Game, summaries: TeamSummary[] = []): Promise<MediaItem[]> {
     await this.queue;
@@ -224,7 +248,8 @@ export class MediaLibrary {
         (t) =>
           t.id !== id &&
           [t.name, ...t.aliases].some((n) => names.has(mediaKey(n))) &&
-          (registry.teams[t.id] || Object.keys(t.defaults).length),
+          (registry.teams[t.id] ||
+            (Object.keys(t.defaults).length && !t.automaticLogo)),
       );
       if (conflict) throw new Error(`队名或别名已被 ${conflict.name} 使用。`);
       // Discovered names may be absorbed as aliases; configured teams cannot be silently merged.
@@ -236,6 +261,7 @@ export class MediaLibrary {
         name: data.name,
         aliases,
         images: registry.teams[key]?.images || {},
+        logoSource: registry.teams[key]?.logoSource,
       };
       return { id: key };
     });
@@ -246,6 +272,7 @@ export class MediaLibrary {
     slot: MediaSlot,
     content: Buffer | null,
     summaries: TeamSummary[] = [],
+    logoSource?: LogoSource,
   ) {
     const items = await this.list(game, summaries);
     const item = items.find((entry) => entry.id === id);
@@ -280,10 +307,7 @@ export class MediaLibrary {
       } catch {
         throw new Error("无法读取图片，请使用静态 PNG、JPG 或 WebP。");
       }
-      src = `/assets/library/${createHash("sha256").update(png).digest("hex")}.png`;
-      const dest = path.join(this.root, "public", src);
-      await mkdir(path.dirname(dest), { recursive: true });
-      await writeFile(dest, png);
+      src = await this.storePng(png);
     }
     return this.mutate(async (registry) => {
       const entry =
@@ -297,14 +321,31 @@ export class MediaLibrary {
             }).images;
       if (src) entry[slot] = src;
       else delete entry[slot];
+      if (item.kind === "team") {
+        if (src && logoSource) registry.teams[id].logoSource = logoSource;
+        else delete registry.teams[id].logoSource;
+      }
       return { src: src || item.defaults[slot] || null };
     });
+  }
+  private async storePng(png: Buffer) {
+    const src = `/assets/library/${createHash("sha256").update(png).digest("hex")}.png`;
+    const dest = path.join(this.root, "public", src);
+    if (!(await exists(dest))) {
+      await mkdir(path.dirname(dest), { recursive: true });
+      const temporary = `${dest}.${randomUUID()}.tmp`;
+      await writeFile(temporary, png);
+      await rename(temporary, dest);
+    }
+    return src;
   }
   async apply(match: MatchData) {
     await this.queue;
     const registry = await this.read();
     const game = match.game || "dota2";
-    const teams = await this.teams(game, registry);
+    const teams = await this.teams(game, registry, [
+      { radiant: match.radiant, dire: match.dire },
+    ]);
     for (const side of ["radiant", "dire"] as const) {
       const team = teams.find((t) =>
         [t.name, ...t.aliases].some(
@@ -312,6 +353,15 @@ export class MediaLibrary {
         ),
       );
       match[`${side}Logo`] = team?.images.logo;
+      if (team?.automaticLogo && !team.overrides.includes("logo")) {
+        try {
+          match[`${side}Logo`] = await this.storePng(
+            await this.catalog.image(team.automaticLogo.sha),
+          );
+        } catch {
+          match[`${side}Logo`] = undefined;
+        }
+      }
     }
     for (const player of match.players) {
       const images = registry.heroes[`${game}-hero-${player.heroId}`];
@@ -322,7 +372,7 @@ export class MediaLibrary {
   }
 }
 
-export const mediaLibrary = new MediaLibrary(process.cwd());
+export const mediaLibrary = new MediaLibrary(process.cwd(), logoCatalog);
 export async function listDotaTeams(): Promise<TeamSummary[]> {
   const summaries: TeamSummary[] = [];
   for (const dir of ["data/fixtures", "data/cache"]) {

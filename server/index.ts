@@ -39,6 +39,7 @@ import {
   mediaLibrary,
   mediaSlotSchema,
 } from "./media-source";
+import { logoCatalog, logoRepositoryUrl, logoShaSchema } from "./logo-catalog";
 
 const loadAnyMatch = (id: string) =>
   id.startsWith("lol-") ? loadLolMatch(id) : loadMatch(id);
@@ -87,6 +88,52 @@ const wrap =
   };
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, app: "matchcut", version: "0.1.0" }),
+);
+app.get(
+  "/api/logo-catalog",
+  wrap(async (req, res) =>
+    res.json(await logoCatalog.list(req.query.refresh === "1")),
+  ),
+);
+app.get(
+  "/api/logo-catalog/image/:sha",
+  wrap(async (req, res) => {
+    const image = await logoCatalog.image(logoShaSchema.parse(req.params.sha));
+    res
+      .type("png")
+      .set("Cache-Control", "public, max-age=86400, immutable")
+      .send(image);
+  }),
+);
+app.post(
+  "/api/media/teams/:id/catalog-logo",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game);
+    const input = z
+      .object({ sha: logoShaSchema, path: z.string().min(1).max(600) })
+      .parse(req.body);
+    const summaries = await (game === "lol"
+      ? listLolMatches()
+      : listDotaTeams());
+    const id = String(req.params.id);
+    if (
+      !(await mediaLibrary.list(game, summaries)).some(
+        (item) => item.id === id && item.kind === "team",
+      )
+    )
+      throw new Error("未找到这支战队。");
+    const logo = await logoCatalog.find(input.sha, input.path);
+    res.json(
+      await mediaLibrary.setImage(
+        game,
+        id,
+        "logo",
+        await logoCatalog.image(logo.sha),
+        summaries,
+        { name: logo.name, path: logo.path, url: logoRepositoryUrl(logo) },
+      ),
+    );
+  }),
 );
 app.get(
   "/api/media",

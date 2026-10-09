@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  Download,
+  ExternalLink,
   ImagePlus,
   LoaderCircle,
   Plus,
@@ -13,8 +15,14 @@ import {
   X,
 } from "lucide-react";
 import type { Game } from "./domain";
-import { teamInitials, type MediaItem, type MediaSlot } from "./media";
+import {
+  catalogLogoUrl,
+  teamInitials,
+  type MediaItem,
+  type MediaSlot,
+} from "./media";
 import "./admin.css";
+import { LogoPicker } from "./LogoPicker";
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -37,6 +45,7 @@ function Thumbnail({
     <img
       src={src}
       alt={name}
+      loading="lazy"
       onError={() => setFailed(true)}
       style={{ objectFit: logo ? "contain" : "cover" }}
     />
@@ -67,9 +76,11 @@ function ImageSlot({
         <span>
           {item.overrides.includes(slot)
             ? "自定义"
-            : item.images[slot]
-              ? "默认"
-              : "未设置"}
+            : slot === "logo" && item.automaticLogo
+              ? "自动匹配"
+              : item.images[slot]
+                ? "默认"
+                : "未设置"}
         </span>
       </div>
       <div className={`media-image-preview ${slot} ${background}`}>
@@ -153,6 +164,7 @@ export function AssetAdmin() {
   const [aliases, setAliases] = useState("");
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  const [pickerTeam, setPickerTeam] = useState<MediaItem | null>(null);
   const selected = items.find(
     (item) => item.id === selectedId && item.kind === kind,
   );
@@ -411,13 +423,15 @@ export function AssetAdmin() {
                     <span className={item.overrides.length ? "is-custom" : ""}>
                       {item.overrides.length
                         ? "自定义"
-                        : (
-                              kind === "team"
-                                ? item.images.logo
-                                : item.images.portrait
-                            )
-                          ? "默认"
-                          : "待补图"}
+                        : kind === "team" && item.automaticLogo
+                          ? "自动匹配"
+                          : (
+                                kind === "team"
+                                  ? item.images.logo
+                                  : item.images.portrait
+                              )
+                            ? "默认"
+                            : "待补图"}
                     </span>
                   </button>
                 ))}
@@ -455,6 +469,39 @@ export function AssetAdmin() {
                   onChange={changeImage}
                 />
               ))}
+              {selected.kind === "team" && (
+                <div className="media-catalog-entry">
+                  <button
+                    className="media-button"
+                    disabled={busy}
+                    onClick={() => setPickerTeam(selected)}
+                  >
+                    <Download size={15} />
+                    从图标库选择
+                  </button>
+                  {selected.logoSource && (
+                    <a
+                      href={selected.logoSource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      已绑定：{selected.logoSource.name}{" "}
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                  {!selected.overrides.includes("logo") &&
+                    selected.automaticLogo && (
+                      <a
+                        href={catalogLogoUrl(selected.automaticLogo)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        自动匹配：{selected.automaticLogo.name}{" "}
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
+                </div>
+              )}
               {selected.kind === "team" && (
                 <form
                   className="media-team-form"
@@ -580,6 +627,16 @@ export function AssetAdmin() {
             </button>
           </form>
         </div>
+      )}
+      {pickerTeam && (
+        <LogoPicker
+          team={pickerTeam}
+          onClose={() => setPickerTeam(null)}
+          onBound={async () => {
+            await refresh();
+            setNotice("图标已绑定");
+          }}
+        />
       )}
     </div>
   );

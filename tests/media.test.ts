@@ -62,8 +62,96 @@ test("uploads persist, reset restores defaults and leaves historical image files
     team.defaults.logo,
   );
   assert.ok((await readFile(path.join(root, "public", uploaded.src!))).length);
+  const source = {
+    name: "t1",
+    path: "league-of-legends/t1/t1-logo.png",
+    url: "https://github.com/lootmarket/esport-team-logos/blob/master/league-of-legends/t1/t1-logo.png",
+  };
+  await restarted.setImage("lol", team.id, "logo", png, [], source);
+  await restarted.saveTeam(
+    "lol",
+    { name: team.name, aliases: ["T1 esports"] },
+    team.id,
+    [],
+  );
+  assert.deepEqual(
+    (await new MediaLibrary(root).list("lol")).find((v) => v.id === team.id)!
+      .logoSource,
+    source,
+  );
+  await restarted.setImage("lol", team.id, "logo", png);
+  assert.equal(
+    (await restarted.list("lol")).find((v) => v.id === team.id)!.logoSource,
+    undefined,
+  );
 });
 
+test("case-insensitive automatic defaults become local video assets; custom images win and reset returns to automatic", async (t) => {
+  const { root, library, png } = await setup(t);
+  const sha = "a".repeat(40);
+  await writeFile(
+    path.join(root, "data/fixtures/logo-catalog.json"),
+    JSON.stringify({
+      fetchedAt: "2026-10-09",
+      logos: [
+        {
+          game: "lol",
+          name: "mixed case club",
+          path: "league-of-legends/mixed-case-club/logo.png",
+          sha,
+        },
+      ],
+    }),
+  );
+  await mkdir(path.join(root, "data/cache/logo-catalog/images"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(root, "data/cache/logo-catalog/images", sha + ".png"),
+    png,
+  );
+  const summaries = [{ radiant: "MiXeD Case Club", dire: "T1" }];
+  const item = (await library.list("lol", summaries)).find(
+    (item) => item.name === "MiXeD Case Club",
+  )!;
+  assert.equal(item.automaticLogo?.sha, sha);
+  assert.equal(item.images.logo, "/api/logo-catalog/image/" + sha);
+  assert.deepEqual(item.overrides, []);
+  const [match] = await fixtures();
+  match.radiant = "MiXeD Case Club";
+  await library.apply(match);
+  const automatic = match.radiantLogo;
+  assert.match(automatic!, /^\/assets\/library\//);
+  assert.deepEqual(await readFile(path.join(root, "public", automatic!)), png);
+  const custom = await sharp({
+    create: { width: 60, height: 60, channels: 4, background: "blue" },
+  })
+    .png()
+    .toBuffer();
+  const uploaded = await library.setImage(
+    "lol",
+    item.id,
+    "logo",
+    custom,
+    summaries,
+  );
+  await library.apply(match);
+  assert.equal(match.radiantLogo, uploaded.src);
+  assert.notEqual(match.radiantLogo, automatic);
+  await library.setImage("lol", item.id, "logo", null, summaries);
+  await library.apply(match);
+  assert.equal(match.radiantLogo, automatic);
+  assert.equal(
+    (await library.list("dota2", summaries)).find(
+      (item) => item.name === "MiXeD Case Club",
+    )!.images.logo,
+    undefined,
+  );
+  const [different] = await fixtures();
+  different.radiant = "Mixed Club";
+  await library.apply(different);
+  assert.equal(different.radiantLogo, undefined);
+});
 test("aliases absorb discovered names, reject configured collisions, preserve renamed names and stay game-specific", async (t) => {
   const { library, png } = await setup(t);
   const summaries = [{ radiant: "New Club", dire: "NC" }];

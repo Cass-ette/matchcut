@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import os from "node:os";
@@ -16,6 +24,7 @@ import {
   type ReportData,
 } from "../src/domain";
 import type { MediaItem } from "../src/media";
+import { LogoCatalog } from "../server/logo-catalog";
 
 const root = process.cwd();
 const isolated = await mkdtemp(path.join(os.tmpdir(), "matchcut-media-smoke-"));
@@ -30,6 +39,29 @@ await cp(
 await cp(path.join(root, "public"), path.join(isolated, "public"), {
   recursive: true,
 });
+// Fetch one real upstream image, then run all binding actions against an isolated cache.
+const catalogSource = new LogoCatalog(root);
+const catalogData = await catalogSource.list();
+const catalogT1 = catalogData.logos.find(
+  (logo) => logo.game === "lol" && logo.name === "t1",
+)!;
+const catalogImage = await catalogSource.image(catalogT1.sha);
+await mkdir(path.join(isolated, "data/cache/logo-catalog/images"), {
+  recursive: true,
+});
+await writeFile(
+  path.join(isolated, "data/cache/logo-catalog/images", catalogT1.sha + ".png"),
+  catalogImage,
+);
+const catalogKT = catalogData.logos.find(
+  (logo) =>
+    logo.game === "lol" &&
+    logo.path === "league-of-legends/kt-rolster/kt-rolster-logo.png",
+)!;
+await writeFile(
+  path.join(isolated, "data/cache/logo-catalog/images", catalogKT.sha + ".png"),
+  await catalogSource.image(catalogKT.sha),
+);
 await symlink(path.join(root, "dist"), path.join(isolated, "dist"));
 const port = 4318;
 const base = `http://127.0.0.1:${port}`;
@@ -136,6 +168,66 @@ try {
     await page.getByLabel("战队名称", { exact: true }).inputValue(),
     "Smoke Test Club",
   );
+  await page.getByRole("button", { name: "从图标库选择", exact: true }).click();
+  await page.getByLabel("搜索开源图标").fill("zzzzxqnomatchzzzz");
+  await page
+    .getByText("没有匹配结果，试试战队简称或「查看全部」。", { exact: true })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "绑定到当前战队", exact: true })
+      .isDisabled(),
+    true,
+  );
+  await page.getByLabel("搜索开源图标").fill("T1");
+  await page
+    .locator(".logo-candidate")
+    .filter({ has: page.getByText("t1", { exact: true }) })
+    .click();
+  await page.locator(".logo-binding-preview img").waitFor();
+  await page.screenshot({ path: folder + "/logo-picker.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await checkOverflow(page);
+  await page.screenshot({
+    path: folder + "/logo-picker-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1512, height: 1080 });
+  await page
+    .getByRole("button", { name: "绑定到当前战队", exact: true })
+    .click();
+  await page.getByText("图标已绑定", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByLabel("战队名称", { exact: true }).inputValue(),
+    "Smoke Test Club",
+  );
+  await page.getByRole("link", { name: "已绑定：t1", exact: true }).waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByLabel("搜索素材").fill("Smoke Test Club");
+  await page.locator(".media-tile").click();
+  await page.getByRole("link", { name: "已绑定：t1", exact: true }).waitFor();
+  assert.match(
+    (await page.locator(".media-image-preview.logo img").getAttribute("src")) ||
+      "",
+    /\/library\//,
+  );
+  await page.getByRole("button", { name: "新增战队" }).click();
+  await page.getByLabel("新战队名称").fill("kT RoLsTeR");
+  await page.getByRole("button", { name: "创建战队" }).click();
+  await loaded();
+  await page
+    .getByRole("link", { name: "自动匹配：kt rolster", exact: true })
+    .waitFor();
+  assert.equal(
+    await page.locator(".media-image-preview.logo img").getAttribute("src"),
+    "/api/logo-catalog/image/" + catalogKT.sha,
+  );
+  await page.getByLabel("搜索素材").fill("kT RoLsTeR");
+  assert.match(await page.locator(".media-tile").innerText(), /自动匹配/);
+  await page.screenshot({
+    path: folder + "/automatic-logo.png",
+    fullPage: true,
+  });
   await page.getByRole("tab", { name: /英雄图片/ }).click();
   await page.getByLabel("搜索素材").fill("Aatrox");
   await page.locator(".media-tile").click();
@@ -173,14 +265,21 @@ try {
   await page.getByRole("tab", { name: /战队图标/ }).click();
   await page.getByLabel("搜索素材").fill("T1");
   await page.locator(".media-tile").click();
-  await page
-    .getByLabel("上传战队图标", { exact: true })
-    .setInputFiles({
-      name: "final-logo.png",
-      mimeType: "image/png",
-      buffer: testImage,
-    });
+  await page.getByLabel("上传战队图标", { exact: true }).setInputFiles({
+    name: "final-logo.png",
+    mimeType: "image/png",
+    buffer: testImage,
+  });
   await loaded();
+  await page.getByRole("button", { name: "从图标库选择", exact: true }).click();
+  await page
+    .locator(".logo-candidate")
+    .filter({ has: page.getByText("t1", { exact: true }) })
+    .click();
+  await page
+    .getByRole("button", { name: "绑定到当前战队", exact: true })
+    .click();
+  await page.getByText("图标已绑定", { exact: true }).waitFor();
   await page.getByLabel("搜索素材").fill("");
   await page.waitForTimeout(250);
   await page.screenshot({ path: folder + "/admin-teams.png", fullPage: true });
@@ -205,6 +304,11 @@ try {
   ]) {
     const { match } = await api<{ match: ReportData }>(endpoint);
     assert.ok(match.radiantLogo && match.direLogo);
+    if (match.game === "lol")
+      assert.match(
+        match[match.radiant === "T1" ? "radiantLogo" : "direLogo"]!,
+        /\/library\//,
+      );
     const settings = {
       ...defaultSettings(match),
       theme: "obsidian" as const,
@@ -278,8 +382,12 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "Media admin upload, aliases, restart persistence, reset, invalid files, mobile layout and three opening scenes passed. Isolated data only.",
+    "Media admin uploads, catalog search/binding, persistence, reset, invalid files, mobile layout and three opening scenes passed. Isolated data only.",
   );
+} catch (error) {
+  await page.screenshot({ path: folder + "/failure.png", fullPage: true });
+  console.error(await page.locator("body").innerText());
+  throw error;
 } finally {
   await browser.close();
   server.kill("SIGTERM");
