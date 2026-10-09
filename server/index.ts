@@ -36,17 +36,11 @@ import {
 import {
   importLolCsv,
   listLolMatches,
-  listLolMedia,
   loadLolMatch,
   loadLolSeries,
 } from "./lol-source";
 import { importBgm, listBgm, resolveBgm } from "./audio-source";
-import {
-  listDotaTeams,
-  mediaGameSchema,
-  mediaLibrary,
-  mediaSlotSchema,
-} from "./media-source";
+import { mediaGameSchema, mediaLibrary, mediaSlotSchema } from "./media-source";
 import { logoCatalog, logoRepositoryUrl, logoShaSchema } from "./logo-catalog";
 import {
   fetchPhotoCandidate,
@@ -55,6 +49,14 @@ import {
   photoPageUrl,
   photoCandidateSchema,
 } from "./player-photos";
+import {
+  mediaPage,
+  mediaItem,
+  mediaQuerySchema,
+  mediaSummaries,
+  ensureMediaIndex,
+} from "./media-index";
+import { Thumbnails } from "./thumbnails";
 
 const loadAnyMatch = (id: string) =>
   id.startsWith("cs2-")
@@ -62,12 +64,7 @@ const loadAnyMatch = (id: string) =>
     : id.startsWith("lol-")
       ? loadLolMatch(id)
       : loadMatch(id);
-const summariesFor = (game: string) =>
-  game === "cs2"
-    ? listCsMatches()
-    : game === "lol"
-      ? listLolMedia()
-      : listDotaTeams();
+const summariesFor = mediaSummaries;
 const preferenceFile = (game: string) =>
   game === "cs2"
     ? "data/preferences-cs2.json"
@@ -78,6 +75,7 @@ const preferenceFile = (game: string) =>
 const root = process.cwd(),
   port = Number(process.env.PORT || 4317),
   origin = "http://127.0.0.1:" + port;
+const thumbnails = new Thumbnails(root, (sha) => logoCatalog.image(sha));
 await initializeData();
 await mkdir(path.join(root, "output"), { recursive: true });
 const app = express();
@@ -165,9 +163,22 @@ app.get(
 app.get(
   "/api/logo-catalog/image/:sha",
   wrap(async (req, res) => {
-    const image = await logoCatalog.image(logoShaSchema.parse(req.params.sha));
+    const sha = logoShaSchema.parse(req.params.sha);
+    const image =
+      req.query.thumbnail === "1"
+        ? await thumbnails.image({
+            id: sha,
+            game: "lol",
+            kind: "team",
+            name: "",
+            aliases: [],
+            defaults: {},
+            overrides: [],
+            images: { logo: `/api/logo-catalog/image/${sha}` },
+          })
+        : await logoCatalog.image(sha);
     res
-      .type("png")
+      .type(req.query.thumbnail === "1" ? "webp" : "png")
       .set("Cache-Control", "public, max-age=86400, immutable")
       .send(image);
   }),
@@ -204,7 +215,38 @@ app.get(
   "/api/media",
   wrap(async (req, res) => {
     const game = mediaGameSchema.parse(req.query.game || "dota2");
-    res.json(await mediaLibrary.list(game, await summariesFor(game)));
+    // Keep the original full-list API for existing local automation. The UI
+    // always supplies a kind and uses bounded, indexed pages.
+    if (!req.query.kind)
+      res.json(await mediaLibrary.list(game, await summariesFor(game)));
+    else res.json(await mediaPage(game, mediaQuerySchema.parse(req.query)));
+  }),
+);
+app.get(
+  "/api/media/:id/thumbnail",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game || "dota2");
+    const item = await mediaItem(game, String(req.params.id));
+    const image = item ? await thumbnails.image(item) : undefined;
+    if (!image) {
+      res.status(404).end();
+      return;
+    }
+    res.type("webp").set("Cache-Control", "private, max-age=86400").send(image);
+  }),
+);
+app.get(
+  "/api/media/:id",
+  wrap(async (req, res) => {
+    const item = await mediaItem(
+      mediaGameSchema.parse(req.query.game || "dota2"),
+      String(req.params.id),
+    );
+    if (!item) {
+      res.status(404).json({ error: "素材不存在。" });
+      return;
+    }
+    res.json(item);
   }),
 );
 app.post(
@@ -590,6 +632,14 @@ if (built) {
     appType: "spa",
   });
   app.use(vite.middlewares);
+}
+console.log("正在同步本地资料索引；首次升级会读取已缓存比赛…");
+for (const game of ["dota2", "lol", "cs2"] as const) {
+  try {
+    await ensureMediaIndex(game);
+  } catch (error) {
+    console.error(`${game} 索引未就绪：`, (error as Error).message);
+  }
 }
 const server = app.listen(port, "127.0.0.1", () =>
   console.log("\n  Matchcut is ready → " + origin + "\n"),

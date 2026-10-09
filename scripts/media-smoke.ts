@@ -24,7 +24,7 @@ import {
   totalFrames,
   type ReportData,
 } from "../src/domain";
-import type { MediaItem } from "../src/media";
+import type { MediaItem, MediaPage } from "../src/media";
 import { LogoCatalog } from "../server/logo-catalog";
 
 const root = process.cwd();
@@ -113,6 +113,58 @@ try {
     }
   }
   assert.ok(serverLog.includes("Matchcut is ready"), serverLog);
+  await page.goto(base + "/admin?game=lol&kind=player", {
+    waitUntil: "networkidle",
+  });
+  assert.equal(await page.locator(".media-tile").count(), 60);
+  const firstPage = await page.locator(".media-tile strong").allTextContents();
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await page.locator(".media-result-count").waitFor();
+  const secondPage = await page.locator(".media-tile strong").allTextContents();
+  assert.equal(secondPage.length, 60);
+  assert.notDeepEqual(firstPage, secondPage);
+  await page.getByLabel("搜索素材").fill("Faker");
+  await page
+    .locator(".media-tile strong")
+    .filter({ hasText: /^Faker$/ })
+    .waitFor();
+  assert.equal(await page.locator(".media-tile").count(), 1);
+  const thumb = page.locator(".media-tile img");
+  assert.match((await thumb.getAttribute("src"))!, /\/thumbnail\?/);
+  await page.waitForFunction(() => {
+    const img = document.querySelector<HTMLImageElement>(".media-tile img");
+    return img?.complete && img.naturalWidth > 0;
+  });
+  assert.ok(
+    await thumb.evaluate(
+      (img) => (img as HTMLImageElement).naturalWidth <= 320,
+    ),
+  );
+  // A response from the previous search must never replace the current game.
+  await page.route("**/api/media?**", async (route) => {
+    if (
+      new URL(route.request().url()).searchParams.get("query") ===
+      "delayed-search"
+    )
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue().catch(() => {});
+  });
+  const delayed = page.waitForRequest((req) =>
+    req.url().includes("query=delayed-search"),
+  );
+  await page.getByLabel("搜索素材").fill("delayed-search");
+  await delayed;
+  await page.getByRole("button", { name: "CS", exact: true }).click();
+  await page.locator(".media-result-count").waitFor();
+  assert.match(
+    await page.locator(".media-result-count").innerText(),
+    /2 支战队/,
+  );
+  await page.unroute("**/api/media?**");
+  assert.equal(
+    (await fetch(base + "/api/media?game=lol&kind=player&limit=101")).status,
+    400,
+  );
   await page.goto(base + "/admin?game=lol", { waitUntil: "networkidle" });
   await page.getByLabel("搜索素材").fill("T1");
   await page.locator(".media-tile").filter({ hasText: /^T1/ }).click();
@@ -161,6 +213,8 @@ try {
       "",
     /lol-t1/,
   );
+  await page.getByLabel("搜索素材").fill("Smoke Test Club");
+  await page.getByText("没有匹配的素材", { exact: true }).waitFor();
   await page.getByRole("button", { name: "新增战队" }).click();
   await page.getByLabel("新战队名称").fill("Smoke Test Club");
   await page.getByRole("button", { name: "创建战队" }).click();
@@ -172,6 +226,7 @@ try {
   await page.getByLabel("搜索素材").fill("Smoke Test Club");
   assert.equal(await page.locator(".media-tile .logo-review-badge").count(), 1);
   await page.getByLabel("素材筛选").selectOption("review");
+  await page.locator(".media-result-count").waitFor();
   assert.equal(await page.locator(".media-tile").count(), 1);
   await page.screenshot({ path: folder + "/logo-review.png", fullPage: true });
   await page.getByLabel("素材筛选").selectOption("all");
@@ -406,7 +461,12 @@ try {
       waitUntil: "networkidle",
     });
     await page.getByRole("tab", { name: /选手定妆照/ }).waitFor();
-    assert.equal(await page.locator(".media-tile").count(), 10);
+    const catalog = await api<MediaPage>(`/api/media?game=${game}&kind=player`);
+    assert.equal(
+      await page.locator(".media-tile").count(),
+      Math.min(60, catalog.total),
+    );
+    await page.getByLabel("搜索素材").fill(focus.name);
     await page
       .locator(".media-tile")
       .filter({ has: page.getByText(focus.name, { exact: true }) })

@@ -24,6 +24,13 @@ import {
   summarizeLolSeries,
 } from "../src/series";
 import { mediaLibrary, type TeamSummary } from "./media-source";
+import { localStore } from "./local-store";
+import {
+  ArchiveIndex,
+  fileVersion,
+  fingerprint,
+  type ArchiveEntry,
+} from "./archive-index";
 
 const root = process.cwd();
 const fixtures = path.join(root, "data/fixtures/lol");
@@ -70,47 +77,58 @@ const exists = async (file: string) => {
     return false;
   }
 };
-export async function listLolMatches() {
-  const items: LolMediaSummary[] = (await exists(
-    path.join(cache, "index.json"),
-  ))
-    ? await json(path.join(cache, "index.json"))
-    : [];
-  for (const filename of (await readdir(fixtures)).filter((name) =>
-    /^LOLTMNT[\w-]+\.json$/.test(name),
-  )) {
-    if (items.some((m) => m.id === "lol-" + filename.slice(0, -5))) continue;
-    const sample: Snapshot = await json(path.join(fixtures, filename));
-    items.push(summary(normalizeLol(sample.rows, catalog, sample.fetchedAt)));
-  }
-  return items.sort((a, b) => b.date.localeCompare(a.date));
-}
-
-export async function listLolMedia(): Promise<TeamSummary[]> {
-  const result: TeamSummary[] = [];
-  for (const item of await listLolMatches()) {
-    if (item.players) {
-      result.push(item);
-      continue;
-    }
-    const file = path.join(cache, item.id + ".json");
-    const raw: Snapshot = await json(
-      (await exists(file))
-        ? file
-        : path.join(fixtures, item.id.slice(4) + ".json"),
-    );
-    const match = normalizeLol(raw.rows, catalog, raw.fetchedAt);
-    result.push({
-      radiant: match.radiant,
-      dire: match.dire,
-      players: match.players.map((p) => ({
-        playerId: p.playerId,
-        name: p.name,
-        team: match[p.side],
-      })),
+const store = localStore(root);
+const archive = new ArchiveIndex(store, "lol");
+export async function ensureLolIndex() {
+  const indexFile = path.join(cache, "index.json");
+  const files = (await readdir(fixtures))
+    .filter((name) => /^LOLTMNT[\w-]+\.json$/.test(name))
+    .sort();
+  const versions = await Promise.all(
+    files.map((name) => fileVersion(path.join(fixtures, name))),
+  );
+  const version = fingerprint([await fileVersion(indexFile), files, versions]);
+  await archive.ensure(version, async () => {
+    const items: LolMediaSummary[] = (await exists(indexFile))
+      ? await json(indexFile)
+      : [];
+    const entries: ArchiveEntry[] = items.map((item) => ({
+      id: item.id,
+      version: fingerprint(item),
+      load: async () => {
+        if (item.players?.length) return item;
+        const file = path.join(cache, item.id + ".json");
+        const raw: Snapshot = await json(
+          (await exists(file))
+            ? file
+            : path.join(fixtures, item.id.slice(4) + ".json"),
+        );
+        return summary(normalizeLol(raw.rows, catalog, raw.fetchedAt));
+      },
+    }));
+    const known = new Set(items.map((m) => m.id));
+    files.forEach((name, i) => {
+      const id = "lol-" + name.slice(0, -5);
+      if (known.has(id)) return;
+      entries.push({
+        id,
+        version: versions[i],
+        load: async () => {
+          const raw: Snapshot = await json(path.join(fixtures, name));
+          return summary(normalizeLol(raw.rows, catalog, raw.fetchedAt));
+        },
+      });
     });
-  }
-  return result;
+    return entries;
+  });
+}
+export async function listLolMatches(): Promise<LolMediaSummary[]> {
+  await ensureLolIndex();
+  return store.matches("lol");
+}
+export async function listLolMedia(): Promise<TeamSummary[]> {
+  await ensureLolIndex();
+  return store.summaries("lol");
 }
 
 const failedAssets = new Map<string, number>();
@@ -306,6 +324,7 @@ export async function importLolCsv(
     }
     await writeFile(indexFile + ".tmp", JSON.stringify([...index.values()]));
     await rename(indexFile + ".tmp", indexFile);
+    if (target === cache) await ensureLolIndex();
     return {
       imported: accepted.size,
       skipped,

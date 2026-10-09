@@ -4,7 +4,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd -- "${0:A:h}"
 
 if ! command -v node >/dev/null 2>&1; then
-  print '请先安装 Node.js 22 或更新版本：https://nodejs.org/'
+  print '请先安装 Node.js 22.13 或更新版本：https://nodejs.org/'
   read '?按回车退出。'
   exit 1
 fi

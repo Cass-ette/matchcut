@@ -19,6 +19,7 @@ import {
   type LogoSource,
 } from "../src/media";
 import { LogoCatalog, logoCatalog } from "./logo-catalog";
+import { localStore } from "./local-store";
 
 export const mediaGameSchema = z.enum(["dota2", "lol", "cs2"]);
 export const mediaSlotSchema = z.enum(["logo", "portrait", "artwork"]);
@@ -86,6 +87,8 @@ type PlayerProfile = {
   aliases: string[];
 };
 export type TeamSummary = {
+  id?: string;
+  date?: string;
   radiant: string;
   dire: string;
   players?: {
@@ -93,6 +96,7 @@ export type TeamSummary = {
     steamId?: string;
     name: string;
     team?: string;
+    aliases?: string[];
   }[];
 };
 const emptyRegistry = (): Registry => ({
@@ -121,38 +125,44 @@ const exists = async (file: string) => {
 };
 
 export class MediaLibrary {
-  private queue: Promise<unknown> = Promise.resolve();
   private file: string;
+  private store;
   constructor(
     private root: string,
     private catalog = new LogoCatalog(root),
   ) {
     this.file = path.join(root, "data/media-library.json");
+    this.store = localStore(root);
   }
 
   private async read(): Promise<Registry> {
+    if (this.store.meta("registry-migrated"))
+      return registrySchema.parse(this.store.registry());
+    let registry: Registry;
     try {
-      return registrySchema.parse(
+      registry = registrySchema.parse(
         JSON.parse(await readFile(this.file, "utf8")),
       );
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT")
-        return emptyRegistry();
-      throw new Error("素材库读取失败，请检查 data/media-library.json。");
+        registry = emptyRegistry();
+      else throw new Error("素材库读取失败，请检查 data/media-library.json。");
     }
+    this.store.migrateRegistry(registry);
+    return registrySchema.parse(this.store.registry());
   }
   private mutate<T>(fn: (registry: Registry) => Promise<T>) {
-    const task = this.queue.then(async () => {
+    const task = this.store.serial(async () => {
       const registry = await this.read();
       const result = await fn(registry);
-      await mkdir(path.dirname(this.file), { recursive: true });
-      const temporary = this.file + "." + randomUUID() + ".tmp";
-      await writeFile(temporary, JSON.stringify(registry, null, 2));
-      await rename(temporary, this.file);
+      this.store.transaction(() => this.store.writeRegistry(registry));
       return result;
     });
-    this.queue = task.catch(() => {});
     return task;
+  }
+  async initialize() {
+    await this.store.settled();
+    if (!this.store.meta("registry-migrated")) await this.read();
   }
   private async seeds(): Promise<TeamSeed[]> {
     try {
@@ -276,7 +286,7 @@ export class MediaLibrary {
     });
   }
   async list(game: Game, summaries: TeamSummary[] = []): Promise<MediaItem[]> {
-    await this.queue;
+    await this.store.settled();
     const registry = await this.read();
     const heroes: MediaItem[] = [];
     const players = new Map<string, MediaItem>();
@@ -341,6 +351,7 @@ export class MediaLibrary {
           ...new Set(
             [
               ...(previous?.aliases || []),
+              ...(player.aliases || []),
               player.playerId || player.steamId || "",
               player.team || "",
               previous?.name || "",
@@ -524,7 +535,7 @@ export class MediaLibrary {
     return src;
   }
   async apply(match: MatchData) {
-    await this.queue;
+    await this.store.settled();
     const registry = await this.read();
     const game = match.game || "dota2";
     const teams = await this.teams(game, registry, [
@@ -585,6 +596,8 @@ export async function listDotaTeams(): Promise<TeamSummary[]> {
       );
       if (raw?.radiant_team?.name && raw?.dire_team?.name)
         summaries.push({
+          id: String(raw.match_id),
+          date: new Date((raw.start_time || 0) * 1000).toISOString(),
           radiant: raw.radiant_team.name,
           dire: raw.dire_team.name,
           players: (raw.players || []).map((p: any) => ({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -23,6 +23,7 @@ import {
   logoReviewText,
   type MediaItem,
   type MediaSlot,
+  type MediaPage,
 } from "./media";
 import "./admin.css";
 import { LogoPicker } from "./LogoPicker";
@@ -52,6 +53,7 @@ function Thumbnail({
       src={src}
       alt={name}
       loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
       style={{
         objectFit: logo ? "contain" : "cover",
@@ -170,17 +172,29 @@ export function AssetAdmin() {
   const [kind, setKind] = useState<"team" | "hero" | "player">(
     new URLSearchParams(location.search).get("kind") === "player"
       ? "player"
-      : "team",
+      : initialGame !== "cs2" &&
+          new URLSearchParams(location.search).get("kind") === "hero"
+        ? "hero"
+        : "team",
   );
   const [items, setItems] = useState<MediaItem[]>([]);
+  const [counts, setCounts] = useState<Record<MediaItem["kind"], number>>({
+    team: 0,
+    hero: 0,
+    player: 0,
+  });
+  const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState("");
+  const [focused, setFocused] = useState<MediaItem>();
+  const [offset, setOffset] = useState(0);
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const generation = useRef(0);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState(
-    new URLSearchParams(location.search).get("filter") === "review"
-      ? "review"
-      : "all",
-  );
-  const [limit, setLimit] = useState(60);
+  const [filter, setFilter] = useState(() => {
+    const value = new URLSearchParams(location.search).get("filter") || "all";
+    return ["custom", "missing", "review"].includes(value) ? value : "all";
+  });
+  const limit = 60;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -193,53 +207,55 @@ export function AssetAdmin() {
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoCandidate, setPhotoCandidate] =
     useState<MediaItem["photoSource"]>();
-  const selected = items.find(
-    (item) => item.id === selectedId && item.kind === kind,
-  );
-  const list = useMemo(
-    () =>
-      items.filter(
-        (item) =>
-          item.kind === kind &&
-          [item.name, ...item.aliases].some((v) =>
-            v.toLowerCase().includes(query.trim().toLowerCase()),
-          ) &&
-          (filter === "all" ||
-            (filter === "review"
-              ? Boolean(item.logoReview)
-              : filter === "custom"
-                ? !!item.overrides.length
-                : kind === "team"
-                  ? !item.images.logo
-                  : kind === "player"
-                    ? !item.images.portrait && !item.images.artwork
-                    : !item.images.portrait || !item.images.artwork)),
-      ),
-    [items, kind, query, filter],
-  );
+  const selected =
+    focused?.game === game && focused.kind === kind ? focused : undefined;
+  const list = items;
+  const pageUrl = (start = offset) =>
+    `/api/media?${new URLSearchParams({ game, kind, filter, query, offset: String(start), limit: String(limit) })}`;
   useEffect(() => {
     const controller = new AbortController();
+    const current = ++generation.current;
     setLoading(true);
     setError("");
-    setNotice("");
     setItems([]);
+    setFocused(undefined);
     setSelectedId("");
-    history.replaceState(null, "", `/admin?game=${game}`);
-    request<MediaItem[]>(`/api/media?game=${game}`, {
-      signal: controller.signal,
-    })
-      .then((data) => {
-        setItems(data);
-        setSelectedId(data.find((item) => item.kind === kind)?.id || "");
+    history.replaceState(
+      null,
+      "",
+      `/admin?${new URLSearchParams({ game, kind, filter })}`,
+    );
+    const timer = setTimeout(() => {
+      void request<MediaPage>(pageUrl(), {
+        signal: controller.signal,
       })
-      .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [game]);
+        .then((data) => {
+          if (controller.signal.aborted || current !== generation.current)
+            return;
+          if (offset && offset >= data.total) {
+            setOffset(
+              data.total ? Math.floor((data.total - 1) / limit) * limit : 0,
+            );
+            return;
+          }
+          setItems(data.items);
+          setCounts(data.counts);
+          setTotal(data.total);
+          setSelectedId(data.items[0]?.id || "");
+          setFocused(data.items[0]);
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted) setError(e.message);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 120);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [game, kind, filter, query, offset, reloadVersion]);
   useEffect(() => {
     setName(selected?.name || "");
     setAliases(selected?.aliases.join("\n") || "");
@@ -253,27 +269,68 @@ export function AssetAdmin() {
     );
   }, [selected?.id]);
   useEffect(() => {
-    setSelectedId((id) =>
-      items.some((item) => item.id === id && item.kind === kind)
-        ? id
-        : items.find((item) => item.kind === kind)?.id || "",
-    );
-  }, [items, kind]);
-  useEffect(() => setLimit(60), [query, kind, filter]);
-  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(timer);
   }, [notice]);
-  const refresh = async () =>
-    setItems(await request<MediaItem[]>(`/api/media?game=${game}`));
-  async function act(action: () => Promise<void>, notice = "已保存") {
+  const refresh = async (id = selectedId) => {
+    if (!id) return;
+    const current = generation.current;
+    const item = await request<MediaItem>(
+      `/api/media/${encodeURIComponent(id)}?game=${game}`,
+    );
+    if (current !== generation.current) return;
+    setFocused(item);
+    setSelectedId(item.id);
+    const matches =
+      filter === "all" ||
+      (filter === "custom"
+        ? item.overrides.length > 0
+        : filter === "review"
+          ? Boolean(item.logoReview)
+          : item.kind === "team"
+            ? !item.images.logo
+            : item.kind === "player"
+              ? !item.images.portrait && !item.images.artwork
+              : !item.images.portrait || !item.images.artwork);
+    if (!matches && items.some((i) => i.id === id)) {
+      setItems((items) => items.filter((i) => i.id !== id));
+      setTotal((n) => Math.max(0, n - 1));
+    } else setItems((items) => items.map((i) => (i.id === id ? item : i)));
+  };
+  const reloadPage = async () => {
+    const current = generation.current;
+    const data = await request<MediaPage>(pageUrl());
+    if (current !== generation.current) return;
+    setItems(data.items);
+    setCounts(data.counts);
+    setTotal(data.total);
+    if (offset && offset >= data.total)
+      setOffset(data.total ? Math.floor((data.total - 1) / limit) * limit : 0);
+  };
+  async function act(
+    action: () => Promise<void | string>,
+    notice = "已保存",
+    reload = false,
+  ) {
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await action();
-      await refresh();
+      const id = await action();
+      if (id) {
+        const item = await request<MediaItem>(
+          `/api/media/${encodeURIComponent(id)}?game=${game}`,
+        );
+        setKind(item.kind);
+        setFilter("all");
+        setQuery(item.name);
+        setOffset(0);
+        setReloadVersion((version) => version + 1);
+      } else {
+        await refresh();
+        if (reload || filter !== "all") await reloadPage();
+      }
       setNotice(notice);
     } catch (e) {
       setError((e as Error).message);
@@ -340,6 +397,9 @@ export function AssetAdmin() {
                 setQuery("");
                 setKind("team");
                 setGame(g);
+                setOffset(0);
+                setFilter("all");
+                setCounts({ team: 0, hero: 0, player: 0 });
               }}
             >
               {g === "cs2" ? "CS" : g === "lol" ? "英雄联盟" : "Dota 2"}
@@ -362,9 +422,7 @@ export function AssetAdmin() {
               setKind(value as typeof kind);
               setQuery("");
               setFilter("all");
-              setSelectedId(
-                items.find((item) => item.kind === value)?.id || "",
-              );
+              setOffset(0);
             }}
           >
             {value === "player" ? (
@@ -373,7 +431,7 @@ export function AssetAdmin() {
               <Shield size={16} />
             )}
             {title}
-            <span>{items.filter((item) => item.kind === value).length}</span>
+            <span>{counts[value as MediaItem["kind"]] || 0}</span>
           </button>
         ))}
       </div>
@@ -406,13 +464,22 @@ export function AssetAdmin() {
                       : "搜索英雄"
                 }
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                maxLength={150}
+                disabled={busy}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setOffset(0);
+                }}
               />
             </label>
             <select
               aria-label="素材筛选"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              disabled={busy}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                setOffset(0);
+              }}
             >
               <option value="all">全部</option>
               <option value="custom">已替换</option>
@@ -441,7 +508,7 @@ export function AssetAdmin() {
           ) : (
             <>
               <div className="media-result-count">
-                {list.length}{" "}
+                {total}{" "}
                 {kind === "team"
                   ? "支战队"
                   : kind === "player"
@@ -449,7 +516,7 @@ export function AssetAdmin() {
                     : "位英雄"}
               </div>
               <div className="media-grid">
-                {list.slice(0, limit).map((item) => (
+                {list.map((item) => (
                   <button
                     key={item.id}
                     className={`media-tile ${selectedId === item.id ? "selected" : ""}`}
@@ -457,6 +524,7 @@ export function AssetAdmin() {
                     aria-pressed={selectedId === item.id}
                     onClick={() => {
                       setSelectedId(item.id);
+                      setFocused(item);
                       if (window.matchMedia("(max-width: 850px)").matches)
                         document
                           .querySelector(".media-editor")
@@ -477,11 +545,7 @@ export function AssetAdmin() {
                     )}
                     <div className={`media-thumb ${kind}`}>
                       <Thumbnail
-                        src={
-                          kind === "team"
-                            ? item.images.logo
-                            : item.images.portrait || item.images.artwork
-                        }
+                        src={item.thumbnail}
                         name={item.name}
                         logo={kind === "team"}
                         player={kind === "player"}
@@ -510,13 +574,27 @@ export function AssetAdmin() {
               {!list.length && (
                 <div className="media-empty">没有匹配的素材</div>
               )}
-              {list.length > limit && (
-                <button
-                  className="media-button media-more"
-                  onClick={() => setLimit(limit + 60)}
-                >
-                  加载更多
-                </button>
+              {total > limit && (
+                <nav className="media-pagination" aria-label="素材分页">
+                  <button
+                    className="media-button"
+                    disabled={busy || offset === 0}
+                    onClick={() => setOffset(Math.max(0, offset - limit))}
+                  >
+                    上一页
+                  </button>
+                  <span>
+                    {Math.floor(offset / limit) + 1} /{" "}
+                    {Math.ceil(total / limit)}
+                  </span>
+                  <button
+                    className="media-button"
+                    disabled={busy || offset + limit >= total}
+                    onClick={() => setOffset(offset + limit)}
+                  >
+                    下一页
+                  </button>
+                </nav>
               )}
             </>
           )}
@@ -673,21 +751,25 @@ export function AssetAdmin() {
                   className="media-team-form"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    void act(async () => {
-                      await request(
-                        `/api/media/teams/${selected.id}?game=${game}`,
-                        {
-                          method: "PUT",
-                          ...teamBody(
-                            name,
-                            aliases
-                              .split("\n")
-                              .map((v) => v.trim())
-                              .filter(Boolean),
-                          ),
-                        },
-                      );
-                    });
+                    void act(
+                      async () => {
+                        await request(
+                          `/api/media/teams/${selected.id}?game=${game}`,
+                          {
+                            method: "PUT",
+                            ...teamBody(
+                              name,
+                              aliases
+                                .split("\n")
+                                .map((v) => v.trim())
+                                .filter(Boolean),
+                            ),
+                          },
+                        );
+                      },
+                      "已保存",
+                      true,
+                    );
                   }}
                 >
                   <label>
@@ -748,10 +830,8 @@ export function AssetAdmin() {
                   `/api/media/teams?game=${game}`,
                   { method: "POST", ...teamBody(newName, []) },
                 );
-                setSelectedId(data.id);
-                setQuery("");
-                setFilter("all");
                 setAdding(false);
+                return data.id;
               });
             }}
           >
@@ -801,6 +881,7 @@ export function AssetAdmin() {
           onClose={() => setPickerTeam(null)}
           onBound={async () => {
             await refresh();
+            if (filter !== "all") await reloadPage();
             setNotice("图标已绑定");
           }}
         />

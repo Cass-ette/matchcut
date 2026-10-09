@@ -20,6 +20,7 @@ export type MediaItem = {
   name: string;
   aliases: string[];
   heroId?: number;
+  thumbnail?: string;
   images: Partial<Record<MediaSlot, string>>;
   defaults: Partial<Record<MediaSlot, string>>;
   overrides: MediaSlot[];
@@ -32,6 +33,20 @@ export type MediaItem = {
     pageUrl: string;
     imageUrl: string;
   };
+};
+export type MediaQuery = {
+  kind: MediaItem["kind"];
+  query: string;
+  filter: "all" | "custom" | "missing" | "review";
+  offset: number;
+  limit: number;
+};
+export type MediaPage = {
+  items: MediaItem[];
+  total: number;
+  counts: Record<MediaItem["kind"], number>;
+  offset: number;
+  limit: number;
 };
 export const logoReviewText = (reason: MediaItem["logoReview"]) =>
   reason === "ambiguous" ? "同名待确认" : "缺少队标";

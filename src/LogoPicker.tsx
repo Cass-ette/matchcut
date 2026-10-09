@@ -46,9 +46,10 @@ function CatalogImage({
         />
       )}
       <img
-        src={`/api/logo-catalog/image/${logo.sha}`}
+        src={`/api/logo-catalog/image/${logo.sha}${large ? "" : "?thumbnail=1"}`}
         alt={logo.name}
         loading={large ? "eager" : "lazy"}
+        decoding="async"
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
         style={{ opacity: loaded ? 1 : 0 }}

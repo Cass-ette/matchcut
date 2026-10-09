@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { MediaLibrary, playerMediaId } from "../server/media-source";
+import { localStore } from "../server/local-store";
 import { normalizeLol } from "../src/lol";
 import { summarizeLolSeries } from "../src/series";
 import {
@@ -16,7 +17,10 @@ import {
 
 async function setup(t: TestContext) {
   const root = await mkdtemp(path.join(os.tmpdir(), "matchcut-media-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => {
+    localStore(root).close();
+    await rm(root, { recursive: true, force: true });
+  });
   await mkdir(path.join(root, "data/fixtures/lol"), { recursive: true });
   await cp(
     "data/fixtures/lol/champions.json",
@@ -435,17 +439,30 @@ test("bad image content and incorrect slots are rejected without touching the re
   );
 });
 
-test("concurrent uploads and team edits keep each other; unreadable registries are not overwritten", async (t) => {
+test("concurrent uploads and team edits keep each other across library instances and restarts", async (t) => {
   const { root, library, png } = await setup(t);
   const hero = (await library.list("lol")).find((v) => v.kind === "hero")!;
   await Promise.all([
     library.setImage("lol", hero.id, "portrait", png),
     library.setImage("lol", hero.id, "artwork", png),
-    library.saveTeam("lol", { name: "Test Club", aliases: [] }, undefined, []),
+    new MediaLibrary(root).saveTeam(
+      "lol",
+      { name: "Test Club", aliases: [] },
+      undefined,
+      [],
+    ),
   ]);
   const items = await library.list("lol");
   assert.equal(items.find((v) => v.id === hero.id)!.overrides.length, 2);
   assert.ok(items.find((v) => v.name === "Test Club"));
+  localStore(root).close();
+  const restored = await new MediaLibrary(root).list("lol");
+  assert.equal(restored.find((v) => v.id === hero.id)!.overrides.length, 2);
+  assert.ok(restored.find((v) => v.name === "Test Club"));
+});
+
+test("invalid legacy registry blocks initial migration and is left intact", async (t) => {
+  const { root, library } = await setup(t);
   await writeFile(
     path.join(root, "data/media-library.json"),
     "broken registry",
@@ -462,6 +479,65 @@ test("concurrent uploads and team edits keep each other; unreadable registries a
   assert.equal(
     await readFile(path.join(root, "data/media-library.json"), "utf8"),
     "broken registry",
+  );
+  assert.equal(localStore(root).meta("registry-migrated"), undefined);
+});
+
+test("legacy aliases, images and sources migrate once; later SQLite edits survive restart", async (t) => {
+  const { root, library, png } = await setup(t);
+  const legacyImage = `/assets/library/${"a".repeat(64)}.png`;
+  const legacy = {
+    version: 1,
+    heroes: { "lol-hero-1": { portrait: legacyImage } },
+    players: {},
+    teams: {
+      "legacy-team": {
+        game: "lol",
+        name: "Legacy Club",
+        aliases: ["Previous Club"],
+        images: { logo: legacyImage },
+        logoSource: {
+          name: "Legacy Club",
+          path: "cs/legacy/logo.png",
+          url: "https://example.com/logo.png",
+        },
+      },
+    },
+  };
+  const file = path.join(root, "data/media-library.json");
+  const before = JSON.stringify(legacy);
+  await writeFile(file, before);
+  const items = await library.list("lol");
+  assert.equal(
+    items.find((i) => i.id === "lol-hero-1")!.images.portrait,
+    legacyImage,
+  );
+  assert.deepEqual(items.find((i) => i.id === "legacy-team")!.aliases, [
+    "Previous Club",
+  ]);
+  assert.equal(
+    items.find((i) => i.id === "legacy-team")!.logoSource!.url,
+    "https://example.com/logo.png",
+  );
+  await library.setImage("lol", "lol-hero-1", "portrait", png);
+  const updated = (await library.list("lol")).find(
+    (i) => i.id === "lol-hero-1",
+  )!.images.portrait;
+  assert.equal(await readFile(file, "utf8"), before);
+  await writeFile(file, "old JSON is now only a backup");
+  localStore(root).close();
+  const restored = await new MediaLibrary(root).list("lol");
+  assert.equal(
+    restored.find((i) => i.id === "lol-hero-1")!.images.portrait,
+    updated,
+  );
+  assert.ok(restored.find((i) => i.id === "legacy-team"));
+  await assert.rejects(
+    library.saveTeam("lol", { name: "", aliases: [] }, "legacy-team", []),
+  );
+  assert.equal(
+    (await library.list("lol")).find((i) => i.id === "legacy-team")!.name,
+    "Legacy Club",
   );
 });
 

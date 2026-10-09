@@ -735,3 +735,13 @@
   max-height: 240px;
   object-fit: contain;
 }
+.media-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
