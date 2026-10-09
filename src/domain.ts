@@ -10,37 +10,52 @@ export const matchIdSchema = z
   .string()
   .regex(/^(?:\d{6,15}|lol-[A-Za-z0-9_-]{1,100})$/);
 export const SCENES = [
-  "赛果开场",
+  "比赛战报",
   "经济走势",
-  "选手雷达",
+  "对位雷达",
   "伤害排行",
-  "赛后定格",
+  "赛果回顾",
 ] as const;
 export const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const POSITIONS = [1, 2, 3, 4, 5] as const;
 export type Position = (typeof POSITIONS)[number];
 export const POSITION_NAMES: Record<Position, string> = {
-  1: "一号位 · 核心",
-  2: "二号位 · 中单",
-  3: "三号位 · 劣势路",
-  4: "四号位 · 游走",
-  5: "五号位 · 辅助",
+  1: "一号位",
+  2: "二号位",
+  3: "三号位",
+  4: "四号位",
+  5: "五号位",
 };
 export const LOL_POSITION_NAMES: Record<Position, string> = {
-  1: "上单 · TOP",
-  2: "打野 · JUNGLE",
-  3: "中单 · MID",
-  4: "下路 · ADC",
-  5: "辅助 · SUPPORT",
+  1: "上单",
+  2: "打野",
+  3: "中单",
+  4: "下路",
+  5: "辅助",
 };
 export const positionNames = (m: ReportData) =>
   m.game === "lol" ? LOL_POSITION_NAMES : POSITION_NAMES;
 export const sceneNames = (m: ReportData) =>
   m.series
-    ? ["系列赛比分", "累计资源", "对位雷达", "累计伤害", "系列赛定格"]
+    ? ["系列赛比分", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
     : m.game === "lol"
-      ? ["赛果开场", "团队资源", "选手雷达", "伤害排行", "赛后定格"]
+      ? ["比赛战报", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
       : SCENES;
+export function gameScope(m: ReportData): string {
+  if (!m.series) return m.gameNumber ? `G${m.gameNumber}` : "本场";
+  const numbers = m.series.games.map((g) => g.gameNumber);
+  const games = numbers.every((n): n is number => n !== undefined)
+    ? !m.series.missingGames.length && numbers.length > 1
+      ? `G${numbers[0]}-G${numbers.at(-1)}`
+      : numbers.map((n) => `G${n}`).join(" / ")
+    : `${numbers.length} 局`;
+  return (
+    games +
+    (m.series.missingGames.length
+      ? ` · 缺 G${m.series.missingGames.join(" / G")}`
+      : "")
+  );
+}
 export const gameName = (m: ReportData) =>
   m.game === "lol" ? "英雄联盟" : "Dota 2";
 export const providerName = (m: ReportData) =>
@@ -422,32 +437,17 @@ export const participation = (
     : undefined;
 };
 export function comparisonScript(m: ReportData, s: Settings) {
-  if (m.series) {
-    if (s.radarMode === "damage")
-      return "双方累计伤害最高选手对比。累计值按已收录局统计，每分钟指标按选手出场时长计算。";
-    return (
-      (s.radarPosition === "all"
-        ? "按上、野、中、下、辅汇总已收录局的同位置数据"
-        : comparisons(m, s)[0].label + "对位：汇总已收录局的同位置数据") +
-      "；轮换选手共同计入该位置。每分钟指标按总时长计算，非能力评分。"
-    );
-  }
   if (s.radarMode === "damage") {
     const [a, b] = getFocus(m);
-    return (
-      a.name + " 与 " + b.name + "：双方伤害最高选手的本场对比，不要求同位置。"
-    );
+    return `双方伤害最高 · ${a.name} vs ${b.name}`;
   }
   if (s.radarPosition === "all")
-    return m.game === "lol"
-      ? "从上单、打野到中单、下路、辅助，逐组看双方本场表现。各轴为对位相对值，非能力评分。"
-      : "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。";
+    return m.series ? "系列赛对位雷达" : "全场对位雷达";
   const comparison = comparisons(m, s)[0];
   return (
     comparison.label +
-    "对位：" +
-    (comparison.pair?.map((p) => p.name).join(" 与 ") || "等待修正位置") +
-    "。各轴为本场相对数值，非能力评分。"
+    "对位 · " +
+    (comparison.pair?.map((p) => p.name).join(" vs ") || "对位待修正")
   );
 }
 export function refreshSettings(
@@ -497,22 +497,19 @@ export function facts(m: ReportData) {
 export function defaultSettings(m: ReportData): Settings {
   const f = facts(m);
   if (m.series) {
-    const { wins, games, missingGames } = m.series;
+    const { wins, missingGames } = m.series;
     const score = `${m.radiant} ${wins.radiant} : ${wins.dire} ${m.dire}`;
-    const scope =
-      `已收录 ${games.length} 局` +
-      (missingGames.length ? `，缺少 G${missingGames.join("、G")}` : "");
     const result = settingsSchema.parse({
       theme: "obsidian",
       accent: "#f6c453",
       secondary: "#c4d0e4",
-      headline: score.length <= 44 ? score : "系列赛累计 · 对局回顾",
+      headline: score.length <= 44 ? score : "系列赛战报",
       scripts: [
-        `${scope}。比分 ${score}。按战队归并换边数据，以下仅统计已收录局。`,
-        "系列赛累计资源：各局终局总经济、小龙、大龙与防御塔相加；缺失项不计作零。",
-        "系列赛对位累计。",
-        `${f.top.name} 累计打出 ${num(f.top.damage)} 点英雄伤害，出场 ${f.top.playedGames} 局。榜单按选手分别统计，输出量不等于全部贡献。`,
-        `${scope}，比分 ${wins.radiant} : ${wins.dire}。数据来源 Oracle’s Elixir。`,
+        `系列赛 · ${score}${missingGames.length ? ` · ${gameScope(m)}` : ""}`,
+        "",
+        "系列赛对位雷达",
+        `伤害第一 · ${f.top.name} · ${num(f.top.damage)}`,
+        "",
       ],
     });
     result.scripts[2] = comparisonScript(m, result);
@@ -522,18 +519,19 @@ export function defaultSettings(m: ReportData): Settings {
   const loseKills = m.winner === "radiant" ? m.direScore : m.radiantScore;
   const economic =
     m.game === "lol"
-      ? "终局资源对比：总经济、小龙、大龙与防御塔。这里展示累计结果，不代表资源获取过程。"
+      ? ""
       : f.max.value > 0 && f.min.value < 0
-        ? "经济优势曾易手。天辉最大领先 " +
+        ? m.radiant +
+          " 最大领先 " +
           num(f.max.value) +
-          "，夜魇最大领先 " +
-          num(-f.min.value) +
-          "。"
+          " · " +
+          m.dire +
+          " 最大领先 " +
+          num(-f.min.value)
         : (f.max.value <= 0 ? m.dire : m.radiant) +
-          "在经济采样中保持优势。最大的经济差达到" +
-          num(Math.max(Math.abs(f.max.value), Math.abs(f.min.value))) +
-          "。";
-  return settingsSchema.parse({
+          " 最大经济领先 " +
+          num(Math.max(Math.abs(f.max.value), Math.abs(f.min.value)));
+  const result = settingsSchema.parse({
     ...(m.game === "lol"
       ? { theme: "obsidian", accent: "#f6c453", secondary: "#c4d0e4" }
       : {}),
@@ -542,25 +540,15 @@ export function defaultSettings(m: ReportData): Settings {
         ? "落后 " + compact(f.deficit) + "，依然拿下"
         : f.winner + " 拿下胜利",
     scripts: [
-      matchDuration(m.duration) +
-        "，" +
-        f.winner +
-        " 拿下胜利。人头比 " +
-        winKills +
-        " : " +
-        loseKills +
-        "。",
+      `${f.winner} 获胜 · ${winKills} : ${loseKills} · ${matchDuration(m.duration)}`,
       economic,
-      m.game === "lol"
-        ? "从上单、打野到中单、下路、辅助，逐组看双方本场表现。各轴为对位相对值，非能力评分。"
-        : "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。",
-      f.top.name +
-        " 打出 " +
-        num(f.top.damage) +
-        " 点英雄伤害，全场第一。输出量不等于全部贡献。",
-      "本局胜者：" + f.winner + "。下一场，继续见。",
+      "全场对位雷达",
+      `伤害第一 · ${f.top.name} · ${num(f.top.damage)}`,
+      "",
     ],
   });
+  result.scripts[2] = comparisonScript(m, result);
+  return result;
 }
 export function radar(
   m: ReportData,
@@ -577,35 +565,35 @@ export function radar(
     m.game === "lol"
       ? isSupport(m, position)
         ? [
-            { label: "助攻 / AST", a: a.assists, b: b.assists },
+            { label: "助攻", a: a.assists, b: b.assists },
             {
-              label: "参团率 / KP",
+              label: "参团率",
               a: participation(m, a),
               b: participation(m, b),
               unit: "%",
             },
             { label: "视野得分", a: a.vision, b: b.vision },
-            { label: "放置守卫", a: a.obs, b: b.obs },
-            { label: "排除守卫", a: a.wardsKilled, b: b.wardsKilled },
-            { label: "购买控制守卫", a: a.controlWards, b: b.controlWards },
+            { label: "插眼", a: a.obs, b: b.obs },
+            { label: "排眼", a: a.wardsKilled, b: b.wardsKilled },
+            { label: "真眼购买", a: a.controlWards, b: b.controlWards },
           ]
         : [
-            { label: "击杀 / KILLS", a: a.kills, b: b.kills },
-            { label: "助攻 / AST", a: a.assists, b: b.assists },
-            { label: "总经济 / 分", a: a.gpm, b: b.gpm },
+            { label: "击杀", a: a.kills, b: b.kills },
+            { label: "助攻", a: a.assists, b: b.assists },
+            { label: "分均经济", a: a.gpm, b: b.gpm },
             {
-              label: "补刀 / 分",
+              label: "分均补刀",
               a: a.lastHits / ((a.playedDuration ?? m.duration) / 60),
               b: b.lastHits / ((b.playedDuration ?? m.duration) / 60),
               unit: " CS",
             },
             {
-              label: "伤害 / 分",
+              label: "分均伤害",
               a: a.damage / ((a.playedDuration ?? m.duration) / 60),
               b: b.damage / ((b.playedDuration ?? m.duration) / 60),
             },
             {
-              label: "参团率 / KP",
+              label: "参团率",
               a: participation(m, a),
               b: participation(m, b),
               unit: "%",
@@ -613,9 +601,9 @@ export function radar(
           ]
       : isSupport(m, position)
         ? [
-            { label: "助攻 / AST", a: a.assists, b: b.assists },
+            { label: "助攻", a: a.assists, b: b.assists },
             {
-              label: "参战率 / KP",
+              label: "参战率",
               a: participation(m, a),
               b: participation(m, b),
               unit: "%",
@@ -628,10 +616,10 @@ export function radar(
         : [
             { label: "击杀", a: a.kills, b: b.kills },
             { label: "助攻", a: a.assists, b: b.assists },
-            { label: "经济 / 分", a: a.gpm, b: b.gpm },
-            { label: "经验 / 分", a: a.xpm, b: b.xpm },
+            { label: "分均经济", a: a.gpm, b: b.gpm },
+            { label: "分均经验", a: a.xpm, b: b.xpm },
             {
-              label: "伤害 / 分",
+              label: "分均伤害",
               a: a.damage / ((a.playedDuration ?? m.duration) / 60),
               b: b.damage / ((b.playedDuration ?? m.duration) / 60),
             },
@@ -732,18 +720,8 @@ export function previewProps(
         Math.floor((segment.frames * index) / groups.length),
       text:
         group.label +
-        "：" +
-        (group.pair?.map((p) => p.name).join(" vs ") || "对位待修正") +
-        "。" +
-        (match.series
-          ? "系列赛同位置累计；每分钟指标按出场时长计算，轮换选手共同计入该位置。"
-          : match.game === "lol"
-            ? isSupport(match, group.position)
-              ? "助攻、参团与视野数据，看辅助的本场贡献。"
-              : "经济、补刀、输出与参团，看同位置的本场表现。"
-            : isSupport(match, group.position)
-              ? "助攻、参战、眼位、眩晕和治疗，看辅助的本场贡献。"
-              : "经济、经验、输出与推塔，看同位置的本场表现。"),
+        "对位 · " +
+        (group.pair?.map((p) => p.name).join(" vs ") || "对位待修正"),
     }));
   });
   return {

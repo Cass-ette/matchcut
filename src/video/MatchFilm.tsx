@@ -19,7 +19,7 @@ import {
   PlayerData,
   sceneNames,
   isSupport,
-  providerName,
+  gameScope,
   VideoProps,
   Comparison,
   comparisons,
@@ -533,9 +533,8 @@ function Intro(props: Ctx) {
                 }}
               >
                 {m.series
-                  ? `已收录 ${m.series.games.length} 局比分`
-                  : "英雄击杀"}{" "}
-                · {matchDuration(m.duration)}
+                  ? `系列赛比分 · ${m.series.games.length} 局`
+                  : `击杀 · ${matchDuration(m.duration)}`}
               </div>
             </div>
           ) : (
@@ -547,7 +546,7 @@ function Intro(props: Ctx) {
                 <div key={i} style={{ zIndex: 1 }}>
                   <Tag color={color}>
                     {m.series
-                      ? "SERIES / 战队"
+                      ? "TEAM"
                       : m.game === "lol"
                         ? side === "radiant"
                           ? "BLUE / 蓝方"
@@ -579,11 +578,7 @@ function Intro(props: Ctx) {
                     }}
                   >
                     {m.series
-                      ? m.winner === null
-                        ? "TIED"
-                        : winner
-                          ? "LEADING"
-                          : "TRAILING"
+                      ? `${m.series.wins[side]} WIN${m.series.wins[side] === 1 ? "" : "S"}`
                       : winner
                         ? "VICTORY"
                         : "DEFEAT"}
@@ -665,16 +660,7 @@ function Intro(props: Ctx) {
         }}
       >
         <span>{m.league}</span>
-        <span style={{ fontFamily: mono }}>
-          {m.date.slice(0, 10)} ·{" "}
-          {m.series
-            ? m.series.missingGames.length
-              ? "缺少 G" +
-                m.series.missingGames.join(" / G") +
-                " · 仅统计已收录局"
-              : "系列赛累计 · 仅统计已收录局"
-            : "单局赛果"}
-        </span>
+        <span style={{ fontFamily: mono }}>{m.date.slice(0, 10)}</span>
       </div>
     </AbsoluteFill>
   );
@@ -841,9 +827,6 @@ function Economy(props: Ctx) {
             fill={f.final.value >= 0 ? s.accent : s.secondary}
           />
         )}
-        <text x={left} y="637" fill={p.dim} fontSize="20">
-          经济差 = 天辉 − 夜魇 · 采样数据
-        </text>
       </svg>
       <div
         style={{
@@ -855,7 +838,7 @@ function Economy(props: Ctx) {
           paddingLeft: 46,
         }}
       >
-        <Tag color={p.dim}>最大领先 / 天辉</Tag>
+        <Tag color={p.dim}>{m.radiant} · 最大领先</Tag>
         <div
           style={{
             ...digits,
@@ -866,7 +849,7 @@ function Economy(props: Ctx) {
         >
           {compact(Math.max(0, f.max.value))}
         </div>
-        <Tag color={p.dim}>最大领先 / 夜魇</Tag>
+        <Tag color={p.dim}>{m.dire} · 最大领先</Tag>
         <div
           style={{
             ...digits,
@@ -877,7 +860,7 @@ function Economy(props: Ctx) {
         >
           {compact(Math.max(0, -f.min.value))}
         </div>
-        <Tag color={p.dim}>末次采样 · {f.final.minute.toFixed(0)} MIN</Tag>
+        <Tag color={p.dim}>{f.final.minute.toFixed(0)} 分钟 · 经济差</Tag>
         <div
           style={{
             ...digits,
@@ -1116,7 +1099,7 @@ function TeamResources(props: Ctx) {
   return (
     <AbsoluteFill>
       <Title en="02 / TEAM OBJECTIVES" props={props}>
-        {m.series ? "系列赛累计，资源总览" : "终局资源，一览战局"}
+        资源对比
       </Title>
       <div style={{ position: "absolute", left: 100, right: 100, top: 290 }}>
         <div
@@ -1133,9 +1116,7 @@ function TeamResources(props: Ctx) {
             <small style={{ fontSize: 20 }}>{m.series ? "TEAM" : "BLUE"}</small>
           </span>
           <span style={{ fontSize: 20, color: p.dim, alignSelf: "center" }}>
-            {m.series
-              ? `已收录 ${m.series.games.length} 局 · 各局终局值相加`
-              : `终局累计 · 第 ${m.gameNumber || "—"} 局`}
+            {m.series ? `${m.series.games.length} 局合计` : gameScope(m)}
           </span>
           <span style={{ color: s.secondary }}>
             {m.dire}{" "}
@@ -1221,9 +1202,6 @@ function TeamResources(props: Ctx) {
             </div>
           );
         })}
-        <div style={{ color: p.dim, fontSize: 22, marginTop: 30 }}>
-          总经济含被动收入 · 资源数量按数据源累计口径 · 缺失显示 —
-        </div>
       </div>
     </AbsoluteFill>
   );
@@ -1287,7 +1265,7 @@ function RadarScene(props: Ctx) {
         </Tag>
         <span style={{ fontSize: 24, color: p.ink }}>
           {comparison.label}
-          {m.series ? " · 系列赛累计" : ""}
+          {comparison.position ? "对位" : ""}
         </span>
       </div>
       <div style={{ position: "absolute", top: 200, left: 72 }}>
@@ -1308,7 +1286,7 @@ function RadarScene(props: Ctx) {
           gap: 12,
         }}
       >
-        {[focus[0].name, focus[1].name, "双人对比"].map((name, i) => (
+        {[focus[0].name, focus[1].name, "正面对比"].map((name, i) => (
           <div
             key={i}
             style={{
@@ -1483,7 +1461,11 @@ function RadarScene(props: Ctx) {
               }}
             >
               <Tag color={p.dim}>
-                {support ? "参战率 / KP" : "队内伤害占比"}
+                {support
+                  ? m.game === "lol"
+                    ? "参团率"
+                    : "参战率"
+                  : "伤害占比"}
               </Tag>
               <div
                 style={{
@@ -1570,47 +1552,8 @@ function RadarScene(props: Ctx) {
               </div>
             </div>
           ))}
-          <div
-            style={{
-              borderTop: "1px solid " + p.line,
-              marginTop: 34,
-              paddingTop: 24,
-              color: p.dim,
-              fontSize: 21,
-              lineHeight: 1.8,
-            }}
-          >
-            每轴以二人较高值为外圈。
-            <br />
-            {m.series
-              ? "系列赛累计；轮换选手计入同位置。"
-              : support
-                ? m.game === "lol"
-                  ? "视野和眼位均为本局记录。"
-                  : "眼位为放置数，眩晕为累计秒数。"
-                : "比较本场数据，不作综合能力评级。"}
-          </div>
         </div>
       )}
-      <div
-        style={{
-          position: "absolute",
-          top: 892,
-          left: 1105,
-          right: 85,
-          color: p.dim,
-          fontSize: 18,
-          lineHeight: 1.6,
-        }}
-      >
-        {comparison.provenance} · 六轴相对值
-        <br />
-        {support
-          ? "KP =（击杀 + 助攻）/ 队伍击杀 · — 为缺失"
-          : m.series
-            ? "DPM = 累计英雄伤害 / 出场总分钟数"
-            : "DPM = 英雄伤害 / 本场分钟数 · 非能力评分"}
-      </div>
     </AbsoluteFill>
   );
 }
@@ -1624,7 +1567,7 @@ function Damage(props: Ctx) {
   return (
     <AbsoluteFill>
       <Title en="04 / DAMAGE LEADERS" props={props}>
-        {m.series ? "系列赛，谁贡献了最多输出" : "谁打出了最多伤害"}
+        伤害排行
       </Title>
       <HeroArt
         p={leader}
@@ -1642,9 +1585,7 @@ function Damage(props: Ctx) {
         data-damage-identity
         style={{ position: "absolute", top: 690, left: 85, width: 610 }}
       >
-        <Tag color={color}>
-          {m.series ? "系列赛累计英雄伤害第一" : "全场英雄伤害第一"}
-        </Tag>
+        <Tag color={color}>{m.series ? "系列赛伤害第一" : "全场伤害第一"}</Tag>
         <div
           style={{
             ...digits,
@@ -1672,8 +1613,8 @@ function Damage(props: Ctx) {
             letterSpacing: 2,
           }}
         >
-          <span>TOP 05 / {m.series ? "选手累计英雄伤害" : "英雄伤害"}</span>
-          <span>HERO DAMAGE</span>
+          <span>TOP 5 / {m.series ? "总伤害" : "英雄伤害"}</span>
+          <span>{m.game === "lol" ? "CHAMPION DAMAGE" : "HERO DAMAGE"}</span>
         </div>
         {players.map((pl, i) => {
           const progress = enter(frame, 10 + i * 8, 46),
@@ -1739,11 +1680,6 @@ function Damage(props: Ctx) {
             </div>
           );
         })}
-        <div style={{ marginTop: 25, color: p.dim, fontSize: 20 }}>
-          {m.series
-            ? "按选手分别累计 · 出场局数不同会影响总量"
-            : "不含建筑伤害 · 输出量不等于全部贡献"}
-        </div>
       </div>
     </AbsoluteFill>
   );
@@ -1767,7 +1703,7 @@ function Outro(props: Ctx) {
           fontSize: 175,
           fontWeight: 900,
           color: color + "0b",
-          letterSpacing: -9,
+          letterSpacing: 0,
         }}
       >
         {m.series ? "SERIES" : "VICTORY"}
@@ -1785,11 +1721,7 @@ function Outro(props: Ctx) {
         }}
       />
       <div style={{ position: "absolute", left: 85, top: 282, width: 1030 }}>
-        <Tag color={color}>
-          {m.series
-            ? `SERIES / 已收录 ${m.series.games.length} 局`
-            : "FINAL / 本局胜者"}
-        </Tag>
+        <Tag color={color}>{m.series ? "系列赛战报" : "WINNER / 获胜战队"}</Tag>
         <div
           style={{
             fontSize: fit(
@@ -1816,10 +1748,10 @@ function Outro(props: Ctx) {
                 : matchDuration(m.duration),
             ],
             [
-              m.series ? "累计英雄击杀" : "英雄击杀",
+              m.series ? "总击杀" : "击杀",
               m.radiantScore + " : " + m.direScore,
             ],
-            [m.series ? "最高累计伤害" : "全场最高伤害", compact(f.top.damage)],
+            ["最高伤害", compact(f.top.damage)],
           ].map(([label, value]) => (
             <div key={label}>
               <Tag color={p.dim}>{label}</Tag>
@@ -1855,11 +1787,7 @@ function Outro(props: Ctx) {
         }}
       >
         <span>{m.league}</span>
-        <span style={{ fontFamily: mono }}>
-          {m.game === "lol"
-            ? "oracleselixir.com · Riot Games"
-            : "opendota.com/matches/" + m.id}
-        </span>
+        <span style={{ fontFamily: mono }}>{m.date.slice(0, 10)}</span>
       </div>
     </AbsoluteFill>
   );
@@ -1914,6 +1842,7 @@ export function MatchFilm(props: VideoProps) {
   const caption = props.captions.find((c) => frame >= c.start && frame < c.end);
   return (
     <AbsoluteFill
+      data-match-film
       style={{ fontFamily: font, color: p.ink, overflow: "hidden" }}
     >
       <Background {...props} />
@@ -1966,12 +1895,14 @@ export function MatchFilm(props: VideoProps) {
               marginLeft: 17,
             }}
           >
-            MATCHCUT / {m.game === "lol" ? "LEAGUE OF LEGENDS" : "DOTA 2"}
+            {m.game === "lol" ? "LEAGUE OF LEGENDS" : "DOTA 2"}
           </span>
         </div>
-        <span style={{ fontFamily: mono, fontSize: 18, color: p.dim }}>
-          {m.series ? "SERIES" : "MATCH"} {m.id.replace(/^lol-/, "")}{" "}
-          <span style={{ marginLeft: 26, color: s.accent }}>POST MATCH</span>
+        <span style={{ fontSize: fit(m.league, 640, 20), color: p.dim }}>
+          {m.league}
+          <span style={{ marginLeft: 26, color: s.accent }}>
+            {m.series ? "系列赛" : gameScope(m)}
+          </span>
         </span>
       </div>
       {s.captions && caption && (
@@ -2014,15 +1945,7 @@ export function MatchFilm(props: VideoProps) {
         }}
       >
         <span>
-          {providerName(m).toUpperCase()}{" "}
-          <span style={{ marginLeft: 17 }}>
-            {m.series
-              ? `系列赛累计 · 已收录 ${m.series.games.length} 局`
-              : m.gameNumber
-                ? `单局数据 · G${m.gameNumber}`
-                : "单局数据"}{" "}
-            · {m.date.slice(0, 10)}
-          </span>
+          {gameScope(m)} · {m.date.slice(0, 10)}
         </span>
         <div style={{ display: "flex", gap: 25 }}>
           {sceneNames(m).map((scene, i) => (

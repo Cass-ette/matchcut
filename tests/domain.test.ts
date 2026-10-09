@@ -174,8 +174,8 @@ test("support axes reflect support statistics and do not invent missing values",
   assert.deepEqual(
     axes.map((a) => a.label),
     [
-      "助攻 / AST",
-      "参战率 / KP",
+    "助攻",
+    "参战率",
       "观察守卫",
       "岗哨守卫",
       "眩晕时长",

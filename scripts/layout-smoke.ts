@@ -108,6 +108,16 @@ async function check(page: Page, mode: number | "damage") {
   checks++;
 }
 
+async function checkCopy(page: Page, match: ReportData) {
+  const text = await page.locator("[data-match-film]").innerText();
+  assert.ok(!text.includes(match.id), "Internal match ID appears in the film");
+  assert.doesNotMatch(
+    text,
+    /OpenDota|Oracle|opendota\.com|oracleselixir\.com|MATCHCUT|统计口径|能力评分|每轴以|DPM =|KP =|仅统计|最终解释权/,
+  );
+  if (match.series) assert.match(text, /G1-G5/);
+}
+
 try {
   for (const [name, match] of [
     ["dota", dota],
@@ -136,6 +146,23 @@ try {
       waitUntil: "networkidle",
     });
     await page.locator(".scene-strip button").first().waitFor();
+    if (name !== "stress") {
+      let offset = 0;
+      for (let scene = 0; scene < props.segments.length; scene++) {
+        if ([0, 1, 4].includes(scene)) {
+          const frame = offset + 150;
+          await seek(page, frame, duration);
+          await checkCopy(page, match);
+          checks++;
+          const stillName = `${name}-scene-${scene}`;
+          await page.locator(".player-shell").screenshot({
+            path: `${folder}/${stillName}-preview.png`,
+          });
+          stills.push({ name: stillName, props, frame });
+        }
+        offset += props.segments[scene].frames;
+      }
+    }
     const start = props.segments[0].frames + props.segments[1].frames;
     const groups = comparisons(match, settings);
     const chapter = props.segments[2].frames / groups.length;
@@ -164,12 +191,14 @@ try {
             });
         }
         await check(page, mode);
+        await checkCopy(page, match);
       }
     }
     const damageFrame = start + props.segments[2].frames + 90;
     await seek(page, damageFrame, duration);
     await page.locator("[data-damage-identity]").waitFor();
     await check(page, "damage");
+    await checkCopy(page, match);
     await page
       .locator(".player-shell")
       .screenshot({ path: `${folder}/${name}-damage-preview.png` });

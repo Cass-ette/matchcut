@@ -144,10 +144,13 @@ test("partial series expose gaps and tied results; optional missing values never
     undefined,
   );
   assert.equal(report.objectives![1].radiant, undefined);
-  assert.match(defaultSettings(report).scripts[0], /缺少 G2/);
+  assert.match(defaultSettings(report).scripts[0], /G1 \/ G3 · 缺 G2/);
   const onlyLast = summarizeLolSeries([games[4]]);
   assert.deepEqual(onlyLast.series!.missingGames, [1, 2, 3, 4]);
-  assert.match(defaultSettings(onlyLast).scripts[0], /已收录 1 局/);
+  assert.match(
+    defaultSettings(onlyLast).scripts[0],
+    /G5 · 缺 G1 \/ G2 \/ G3 \/ G4/,
+  );
 });
 test("substitutes share role totals but keep individual damage, played time, KP and champion history", () => {
   const games = fixtures();

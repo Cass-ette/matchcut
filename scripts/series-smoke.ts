@@ -45,7 +45,7 @@ try {
   );
   assert.match(
     await page.locator(".player-shell").innerText(),
-    /已收录 5 局比分/,
+    /系列赛比分 · 5 局/,
   );
   assert.doesNotMatch(
     await page.locator(".player-shell").innerText(),
@@ -78,7 +78,7 @@ try {
   for (let i = 0; i < 5; i++) {
     await page.locator(".scene-strip button").nth(i).click();
     await page.waitForTimeout(180);
-    assert.match(await page.locator(".player-shell").innerText(), /系列赛累计/);
+    assert.match(await page.locator(".player-shell").innerText(), /G1-G5/);
     await page
       .locator(".player-shell")
       .screenshot({ path: `${folder}/scene-${i}.png` });
@@ -99,13 +99,11 @@ try {
   await page.waitForFunction(() =>
     document.querySelector(".match-card-top")?.textContent?.includes("G2"),
   );
-  await page
-    .locator("input[type=file][accept='.json']")
-    .setInputFiles({
-      name: "series.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(project)),
-    });
+  await page.locator("input[type=file][accept='.json']").setInputFiles({
+    name: "series.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(project)),
+  });
   await page.waitForFunction(() => !!document.querySelector(".series-scope"));
   // An intentionally partial archive remains partial and reports its missing games.
   const partial = await (
