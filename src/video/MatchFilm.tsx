@@ -14,6 +14,7 @@ import {
 } from "remotion";
 import "@fontsource/orbitron/latin-700.css";
 import "@fontsource/orbitron/latin-900.css";
+import { teamInitials } from "../media";
 import {
   MatchData,
   PlayerData,
@@ -430,32 +431,9 @@ function Intro(props: Ctx) {
   const { match: m, settings: s } = props;
   const f = useCurrentFrame();
   const p = palettes[s.theme];
-  const focus = getFocus(m);
   const op = enter(f, 0, 32);
   return (
     <AbsoluteFill>
-      {focus.map((player, i) => (
-        <div
-          key={player.slot}
-          style={{
-            position: "absolute",
-            left: i ? 1170 : -20,
-            top: 116,
-            opacity: 0.36 * op,
-            transform: "translateX(" + (1 - op) * (i ? 90 : -90) + "px)",
-          }}
-        >
-          <HeroArt
-            p={player}
-            style={{
-              width: 780,
-              height: 690,
-              maskImage:
-                "linear-gradient(to bottom, #000 45%, transparent 100%)",
-            }}
-          />
-        </div>
-      ))}
       <div
         style={{
           position: "absolute",
@@ -489,7 +467,7 @@ function Intro(props: Ctx) {
           position: "absolute",
           left: 155,
           right: 155,
-          top: 322,
+          top: 282,
           display: "grid",
           gridTemplateColumns: "1fr 570px 1fr",
           alignItems: "center",
@@ -542,8 +520,46 @@ function Intro(props: Ctx) {
               const side = i === 0 ? "radiant" : "dire";
               const color = i === 0 ? s.accent : s.secondary;
               const winner = m.winner === side;
+              const logo = m[`${side}Logo`];
               return (
                 <div key={i} style={{ zIndex: 1 }}>
+                  <div
+                    data-team-logo={side}
+                    style={{
+                      width: 260,
+                      height: 148,
+                      margin: "0 auto 12px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      opacity: op,
+                      transform: `translateY(${(1 - op) * 24}px)`,
+                      filter: `drop-shadow(0 0 28px ${color}35)`,
+                    }}
+                  >
+                    {logo ? (
+                      <Img
+                        src={asset(logo)}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                          filter: "drop-shadow(0 0 1px #ffffffb0)",
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          ...digits,
+                          fontSize: 90,
+                          color,
+                          letterSpacing: 0,
+                        }}
+                      >
+                        {teamInitials(m[side])}
+                      </span>
+                    )}
+                  </div>
                   <Tag color={color}>
                     {m.series
                       ? "TEAM"
@@ -557,9 +573,9 @@ function Intro(props: Ctx) {
                   </Tag>
                   <div
                     style={{
-                      fontSize: fit(m[side], 450, 56),
+                      fontSize: fit(m[side], 450, 44),
                       fontWeight: 900,
-                      margin: "19px 0 23px",
+                      margin: "10px 0 14px",
                       lineHeight: 1.2,
                     }}
                   >

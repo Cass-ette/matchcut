@@ -74,6 +74,10 @@ macOS 双击 `启动 Matchcut.command`，浏览器打开 <http://127.0.0.1:4317>
 
 ## 开发与个性化
 
+素材管理：<http://127.0.0.1:4317/admin>。战队图标、英雄头像和立绘分别上传，可恢复默认；支持静态 PNG、JPG、WebP，单张不超过 12 MB。战队的其他名称每行一个，匹配时不区分大小写、空格和常见分隔符。英雄按游戏与角色 ID 匹配，系列赛换边、不同英雄的历史头像均保留正确对应。
+
+开场使用战队图标，缺图时显示队名缩写。预览与新导出都使用当前素材库；已生成的视频不改变。配置保存于 `data/media-library.json`，上传文件保存于 `public/assets/library/`，迁移或备份时一并保留。恢复默认不会删除旧图片，历史任务仍能引用原文件。内置 15 支战队的图标，来源记录于 `public/assets/teams/SOURCES.md`。
+
 ```sh
 npm ci
 npm run build
@@ -87,6 +91,7 @@ npm test
 npm run smoke
 npm run smoke -- --lol
 npm run smoke -- --series --render
+npm run smoke -- --media --render
 ```
 
 `smoke` 在运行中的工作台执行浏览器检查，截图保存在 `output/verification/`。

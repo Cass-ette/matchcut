@@ -191,6 +191,8 @@ export function summarizeLolSeries(input: MatchData[]): ReportData {
     league: first.league,
     radiant: first.radiant,
     dire: first.dire,
+    radiantLogo: first.radiantLogo,
+    direLogo: first.direLogo,
     duration: games.reduce((n, g) => n + g.duration, 0),
     radiantScore: score("radiant"),
     direScore: score("dire"),

@@ -151,6 +151,8 @@ export type MatchData = {
   dire: string;
   radiantId?: number;
   direId?: number;
+  radiantLogo?: string;
+  direLogo?: string;
   radiantScore: number;
   direScore: number;
   winner: "radiant" | "dire";

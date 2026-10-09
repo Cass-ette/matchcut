@@ -58,6 +58,7 @@ import {
 import { MatchFilm } from "./video/MatchFilm";
 import { groupLolSeries, LolSummary } from "./series";
 import "./style.css";
+import { AssetAdmin } from "./AssetAdmin";
 
 type Job = {
   id: string;
@@ -597,6 +598,7 @@ function App() {
         </a>
         <div className="top-links">
           <span className="active">视频工作台</span>
+          <a href={`/admin?game=${match.game || "dota2"}`}>素材管理</a>
           <button
             onClick={() => {
               setTab("design");
@@ -1911,4 +1913,6 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  location.pathname.replace(/\/$/, "") === "/admin" ? <AssetAdmin /> : <App />,
+);

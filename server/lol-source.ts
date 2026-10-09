@@ -19,6 +19,7 @@ import {
 } from "../src/lol";
 import { MatchData, matchIdSchema } from "../src/domain";
 import { LolSummary, groupLolSeries, summarizeLolSeries } from "../src/series";
+import { mediaLibrary } from "./media-source";
 
 const root = process.cwd();
 const fixtures = path.join(root, "data/fixtures/lol");
@@ -124,6 +125,7 @@ export async function loadLolMatch(id: string) {
   const task = assetQueue.then(() => attachAssets(match));
   assetQueue = task.catch(() => {});
   await task;
+  await mediaLibrary.apply(match);
   return { match, raw, cached: true };
 }
 

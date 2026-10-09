@@ -33,6 +33,12 @@ import {
   loadLolSeries,
 } from "./lol-source";
 import { importBgm, listBgm, resolveBgm } from "./audio-source";
+import {
+  listDotaTeams,
+  mediaGameSchema,
+  mediaLibrary,
+  mediaSlotSchema,
+} from "./media-source";
 
 const loadAnyMatch = (id: string) =>
   id.startsWith("lol-") ? loadLolMatch(id) : loadMatch(id);
@@ -81,6 +87,78 @@ const wrap =
   };
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, app: "matchcut", version: "0.1.0" }),
+);
+app.get(
+  "/api/media",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game || "dota2");
+    res.json(
+      await mediaLibrary.list(
+        game,
+        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+      ),
+    );
+  }),
+);
+app.post(
+  "/api/media/teams",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game);
+    res.json(
+      await mediaLibrary.saveTeam(
+        game,
+        req.body,
+        undefined,
+        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+      ),
+    );
+  }),
+);
+app.put(
+  "/api/media/teams/:id",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game);
+    res.json(
+      await mediaLibrary.saveTeam(
+        game,
+        req.body,
+        String(req.params.id),
+        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+      ),
+    );
+  }),
+);
+app.put(
+  "/api/media/:id/:slot",
+  express.raw({ type: "application/octet-stream", limit: "12mb" }),
+  wrap(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw new Error("请选择图片文件。");
+    const game = mediaGameSchema.parse(req.query.game);
+    res.json(
+      await mediaLibrary.setImage(
+        game,
+        String(req.params.id),
+        mediaSlotSchema.parse(req.params.slot),
+        req.body,
+        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+      ),
+    );
+  }),
+);
+app.delete(
+  "/api/media/:id/:slot",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game);
+    res.json(
+      await mediaLibrary.setImage(
+        game,
+        String(req.params.id),
+        mediaSlotSchema.parse(req.params.slot),
+        null,
+        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+      ),
+    );
+  }),
 );
 app.get(
   "/api/bootstrap",
@@ -287,11 +365,9 @@ app.post(
         body.source !== "current" ||
         !body.gameIds)
     ) {
-      res
-        .status(400)
-        .json({
-          error: "系列赛请使用已导入的英雄联盟比赛，并指定已预览的局数。",
-        });
+      res.status(400).json({
+        error: "系列赛请使用已导入的英雄联盟比赛，并指定已预览的局数。",
+      });
       return;
     }
     if (body.matchId.startsWith("lol-") && body.source === "latest") {
