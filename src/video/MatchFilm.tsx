@@ -1256,24 +1256,87 @@ function TeamResources(props: Ctx) {
       <div style={{ position: "absolute", left: 100, right: 100, top: 290 }}>
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 36,
+            display: "grid",
+            gridTemplateColumns: "1fr 220px 1fr",
+            alignItems: "center",
+            gap: 30,
             fontWeight: 900,
-            marginBottom: 38,
+            marginBottom: 22,
           }}
         >
-          <span style={{ color: s.accent }}>
-            {m.radiant}{" "}
-            <small style={{ fontSize: 20 }}>{m.series ? "TEAM" : "BLUE"}</small>
-          </span>
-          <span style={{ fontSize: 20, color: p.dim, alignSelf: "center" }}>
-            {m.series ? `${m.series.games.length} 局合计` : gameScope(m)}
-          </span>
-          <span style={{ color: s.secondary }}>
-            {m.dire}{" "}
-            <small style={{ fontSize: 20 }}>{m.series ? "TEAM" : "RED"}</small>
-          </span>
+          {(["radiant", null, "dire"] as const).map((side) => {
+            if (!side)
+              return (
+                <span
+                  key="scope"
+                  style={{ fontSize: 20, color: p.dim, textAlign: "center" }}
+                >
+                  {m.series ? `${m.series.games.length} 局合计` : gameScope(m)}
+                </span>
+              );
+            const left = side === "radiant";
+            const logo = m[`${side}Logo`];
+            const color = left ? s.accent : s.secondary;
+            return (
+              <div
+                key={side}
+                style={{
+                  display: "flex",
+                  flexDirection: left ? "row" : "row-reverse",
+                  alignItems: "center",
+                  gap: 20,
+                  minWidth: 0,
+                  color,
+                  textAlign: left ? "left" : "right",
+                }}
+              >
+                <div
+                  data-team-logo={side}
+                  style={{
+                    width: 64,
+                    height: 64,
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {logo ? (
+                    <Img
+                      src={asset(logo)}
+                      alt={`${m[side]} 队标`}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 0 1px #ffffffb0)",
+                      }}
+                    />
+                  ) : (
+                    <span style={{ ...digits, fontSize: 22 }}>
+                      {teamInitials(m[side])}
+                    </span>
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: fit(m[side], 600, 36),
+                      lineHeight: 1.15,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {m[side]}
+                  </div>
+                  <div style={{ fontSize: 14, letterSpacing: 2, marginTop: 8 }}>
+                    {m.series ? "TEAM" : left ? "BLUE" : "RED"}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
         {m.objectives?.map((item, i) => {
           const max = Math.max(item.radiant ?? 0, item.dire ?? 0, 1),
