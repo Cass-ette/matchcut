@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   AbsoluteFill,
+  Audio,
   Easing,
   Img,
   Sequence,
@@ -16,7 +17,9 @@ import "@fontsource/orbitron/latin-900.css";
 import {
   MatchData,
   PlayerData,
-  SCENES,
+  sceneNames,
+  isSupport,
+  providerName,
   VideoProps,
   Comparison,
   comparisons,
@@ -31,6 +34,7 @@ import {
   radar,
   sortedDamage,
   totalFrames,
+  bgmVolume,
 } from "../domain";
 
 const font = '"Arial", "PingFang SC", "Microsoft YaHei", sans-serif';
@@ -100,6 +104,22 @@ function Portrait({
   width?: number;
   height?: number;
 }) {
+  if (p.champions)
+    return (
+      <div style={{ width, height, display: "flex", overflow: "hidden" }}>
+        {p.champions.slice(0, 3).map((c) => (
+          <Img
+            key={c.hero}
+            src={asset(c.image)}
+            style={{
+              width: width / Math.min(3, p.champions!.length),
+              height,
+              objectFit: "cover",
+            }}
+          />
+        ))}
+      </div>
+    );
   return (
     <Img src={asset(p.image)} style={{ width, height, objectFit: "cover" }} />
   );
@@ -344,6 +364,67 @@ function Background({ settings: s }: VideoProps) {
     </AbsoluteFill>
   );
 }
+function SeriesGames({ props }: { props: Ctx }) {
+  const { match: m, settings: s } = props;
+  const frame = useCurrentFrame();
+  const p = palettes[s.theme];
+  if (!m.series) return null;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 100,
+        right: 100,
+        top: 610,
+        height: 170,
+        display: "grid",
+        gridTemplateColumns: `repeat(${Math.min(5, m.series.games.length)}, 1fr)`,
+        gap: 14,
+      }}
+    >
+      {m.series.games.map((game, i) => {
+        const winner = game[game.winner];
+        const color = winner === m.radiant ? s.accent : s.secondary;
+        return (
+          <div
+            key={game.id}
+            style={{
+              background: color + "10",
+              borderTop: "3px solid " + color,
+              padding: m.series!.games.length > 5 ? "5px 18px" : "18px 22px",
+              opacity: enter(frame, 8 + i * 3),
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ fontFamily: mono, color: p.dim, fontSize: 18 }}>
+              G{game.gameNumber || "?"}{" "}
+              <span style={{ float: "right" }}>
+                {matchDuration(game.duration)}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: fit(winner, 250, 30),
+                color,
+                fontWeight: 900,
+                marginTop: 8,
+              }}
+            >
+              {winner} <small style={{ fontSize: 17 }}>WIN</small>
+            </div>
+            {m.series!.games.length <= 5 && (
+              <div style={{ color: p.dim, fontSize: 17, marginTop: 12 }}>
+                {game.radiant} {game.radiantScore} : {game.direScore}{" "}
+                {game.dire}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Intro(props: Ctx) {
   const { match: m, settings: s } = props;
   const f = useCurrentFrame();
@@ -383,7 +464,14 @@ function Intro(props: Ctx) {
           textAlign: "center",
         }}
       >
-        <Tag color={p.dim}>DOTA 2 · POST MATCH</Tag>
+        <Tag color={p.dim}>
+          {m.game === "lol" ? "LEAGUE OF LEGENDS" : "DOTA 2"} · POST MATCH
+          {m.series
+            ? " · SERIES RECAP"
+            : m.game === "lol" && m.gameNumber
+              ? " · GAME " + m.gameNumber
+              : ""}
+        </Tag>
         <div
           style={{
             fontSize: fit(s.headline, 1190, 67),
@@ -419,7 +507,7 @@ function Intro(props: Ctx) {
                 }}
               >
                 <span style={{ ...digits, fontSize: 150, color: s.accent }}>
-                  {Math.round(m.radiantScore * op)}
+                  {Math.round((m.series?.wins.radiant ?? m.radiantScore) * op)}
                 </span>
                 <span
                   style={{
@@ -432,7 +520,7 @@ function Intro(props: Ctx) {
                   :
                 </span>
                 <span style={{ ...digits, fontSize: 150, color: s.secondary }}>
-                  {Math.round(m.direScore * op)}
+                  {Math.round((m.series?.wins.dire ?? m.direScore) * op)}
                 </span>
               </div>
               <div
@@ -443,7 +531,10 @@ function Intro(props: Ctx) {
                   letterSpacing: 3,
                 }}
               >
-                英雄击杀 · {matchDuration(m.duration)}
+                {m.series
+                  ? `已收录 ${m.series.games.length} 局比分`
+                  : "英雄击杀"}{" "}
+                · {matchDuration(m.duration)}
               </div>
             </div>
           ) : (
@@ -454,7 +545,15 @@ function Intro(props: Ctx) {
               return (
                 <div key={i} style={{ zIndex: 1 }}>
                   <Tag color={color}>
-                    {side === "radiant" ? "RADIANT / 天辉" : "DIRE / 夜魇"}
+                    {m.series
+                      ? "SERIES / 战队"
+                      : m.game === "lol"
+                        ? side === "radiant"
+                          ? "BLUE / 蓝方"
+                          : "RED / 红方"
+                        : side === "radiant"
+                          ? "RADIANT / 天辉"
+                          : "DIRE / 夜魇"}
                   </Tag>
                   <div
                     style={{
@@ -478,7 +577,15 @@ function Intro(props: Ctx) {
                       transform: "skewX(-8deg)",
                     }}
                   >
-                    {winner ? "VICTORY" : "DEFEAT"}
+                    {m.series
+                      ? m.winner === null
+                        ? "TIED"
+                        : winner
+                          ? "LEADING"
+                          : "TRAILING"
+                      : winner
+                        ? "VICTORY"
+                        : "DEFEAT"}
                   </span>
                 </div>
               );
@@ -486,58 +593,62 @@ function Intro(props: Ctx) {
           ),
         )}
       </div>
-      <div
-        style={{
-          position: "absolute",
-          top: 614,
-          left: 105,
-          right: 105,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 170,
-        }}
-      >
-        {(["radiant", "dire"] as const).map((side) => (
-          <div key={side} style={{ display: "flex", gap: 10 }}>
-            {m.players
-              .filter((x) => x.side === side)
-              .map((player, i) => (
-                <div
-                  key={player.slot}
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    opacity: enter(f, 8 + i * 3),
-                    transform:
-                      "translateY(" + (1 - enter(f, 8 + i * 3)) * 20 + "px)",
-                  }}
-                >
-                  <Img
-                    src={asset(player.image)}
-                    style={{
-                      width: "100%",
-                      height: 80,
-                      objectFit: "cover",
-                      borderBottom: "3px solid " + teamColor(player, s),
-                    }}
-                  />
+      {m.series ? (
+        <SeriesGames props={props} />
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            top: 614,
+            left: 105,
+            right: 105,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 170,
+          }}
+        >
+          {(["radiant", "dire"] as const).map((side) => (
+            <div key={side} style={{ display: "flex", gap: 10 }}>
+              {m.players
+                .filter((x) => x.side === side)
+                .map((player, i) => (
                   <div
+                    key={player.slot}
                     style={{
-                      fontSize: 18,
-                      textAlign: "center",
-                      marginTop: 9,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      flex: 1,
+                      minWidth: 0,
+                      opacity: enter(f, 8 + i * 3),
+                      transform:
+                        "translateY(" + (1 - enter(f, 8 + i * 3)) * 20 + "px)",
                     }}
                   >
-                    {player.name}
+                    <Img
+                      src={asset(player.image)}
+                      style={{
+                        width: "100%",
+                        height: 80,
+                        objectFit: "cover",
+                        borderBottom: "3px solid " + teamColor(player, s),
+                      }}
+                    />
+                    <div
+                      style={{
+                        fontSize: 18,
+                        textAlign: "center",
+                        marginTop: 9,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {player.name}
+                    </div>
                   </div>
-                </div>
-              ))}
-          </div>
-        ))}
-      </div>
+                ))}
+            </div>
+          ))}
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
@@ -554,7 +665,14 @@ function Intro(props: Ctx) {
       >
         <span>{m.league}</span>
         <span style={{ fontFamily: mono }}>
-          {m.date.slice(0, 10)} · 单局赛果
+          {m.date.slice(0, 10)} ·{" "}
+          {m.series
+            ? m.series.missingGames.length
+              ? "缺少 G" +
+                m.series.missingGames.join(" / G") +
+                " · 仅统计已收录局"
+              : "系列赛累计 · 仅统计已收录局"
+            : "单局赛果"}
         </span>
       </div>
     </AbsoluteFill>
@@ -990,6 +1108,125 @@ function RadarChart({
     </svg>
   );
 }
+function TeamResources(props: Ctx) {
+  const { match: m, settings: s } = props,
+    p = palettes[s.theme];
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill>
+      <Title en="02 / TEAM OBJECTIVES" props={props}>
+        {m.series ? "系列赛累计，资源总览" : "终局资源，一览战局"}
+      </Title>
+      <div style={{ position: "absolute", left: 100, right: 100, top: 290 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 36,
+            fontWeight: 900,
+            marginBottom: 38,
+          }}
+        >
+          <span style={{ color: s.accent }}>
+            {m.radiant}{" "}
+            <small style={{ fontSize: 20 }}>{m.series ? "TEAM" : "BLUE"}</small>
+          </span>
+          <span style={{ fontSize: 20, color: p.dim, alignSelf: "center" }}>
+            {m.series
+              ? `已收录 ${m.series.games.length} 局 · 各局终局值相加`
+              : `终局累计 · 第 ${m.gameNumber || "—"} 局`}
+          </span>
+          <span style={{ color: s.secondary }}>
+            {m.dire}{" "}
+            <small style={{ fontSize: 20 }}>{m.series ? "TEAM" : "RED"}</small>
+          </span>
+        </div>
+        {m.objectives?.map((item, i) => {
+          const max = Math.max(item.radiant ?? 0, item.dire ?? 0, 1),
+            progress = enter(frame, i * 8, 45);
+          return (
+            <div
+              key={item.label}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 220px 1fr",
+                alignItems: "center",
+                gap: 30,
+                height: 111,
+                borderTop: "1px solid " + p.line,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 30 }}>
+                <strong
+                  style={{
+                    ...digits,
+                    color: s.accent,
+                    fontSize: 44,
+                    minWidth: 170,
+                  }}
+                >
+                  {axisValue(item.radiant)}
+                </strong>
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: ((item.radiant ?? 0) / max) * progress * 100 + "%",
+                      height: 18,
+                      background: s.accent,
+                      boxShadow: "0 0 25px " + s.accent + "66",
+                    }}
+                  />
+                </div>
+              </div>
+              <div
+                style={{
+                  textAlign: "center",
+                  color: p.ink,
+                  fontWeight: 700,
+                  fontSize: 26,
+                }}
+              >
+                {item.label}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 30 }}>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      width: ((item.dire ?? 0) / max) * progress * 100 + "%",
+                      height: 18,
+                      background: s.secondary,
+                      boxShadow: "0 0 25px " + s.secondary + "66",
+                    }}
+                  />
+                </div>
+                <strong
+                  style={{
+                    ...digits,
+                    color: s.secondary,
+                    fontSize: 44,
+                    minWidth: 170,
+                    textAlign: "right",
+                  }}
+                >
+                  {axisValue(item.dire)}
+                </strong>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ color: p.dim, fontSize: 22, marginTop: 30 }}>
+          总经济含被动收入 · 资源数量按数据源累计口径 · 缺失显示 —
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+}
 function RadarScene(props: Ctx) {
   const { match: m, settings: s } = props;
   const p = palettes[s.theme],
@@ -1018,7 +1255,7 @@ function RadarScene(props: Ctx) {
       </AbsoluteFill>
     );
   const focus = comparison.pair;
-  const support = Boolean(comparison.position && comparison.position >= 4);
+  const support = isSupport(m, comparison.position);
   const player = focus[mode === 0 ? 0 : 1],
     color = teamColor(player, s);
   const teamTotal = m.players
@@ -1039,10 +1276,17 @@ function RadarScene(props: Ctx) {
         <Tag color={mode === 0 ? s.accent : mode === 1 ? s.secondary : p.ink}>
           03 /{" "}
           {comparison.position
-            ? "POSITION " + String(comparison.position).padStart(2, "0")
+            ? m.game === "lol"
+              ? ["TOP", "JUNGLE", "MID", "BOT", "SUPPORT"][
+                  comparison.position - 1
+                ]
+              : "POSITION " + String(comparison.position).padStart(2, "0")
             : "DAMAGE DUEL"}
         </Tag>
-        <span style={{ fontSize: 24, color: p.ink }}>{comparison.label}</span>
+        <span style={{ fontSize: 24, color: p.ink }}>
+          {comparison.label}
+          {m.series ? " · 系列赛累计" : ""}
+        </span>
       </div>
       <div style={{ position: "absolute", top: 200, left: 72 }}>
         <RadarChart
@@ -1127,6 +1371,39 @@ function RadarScene(props: Ctx) {
               {player.name}
             </div>
           </div>
+          {player.champions && (
+            <div
+              style={{
+                position: "absolute",
+                left: 1105,
+                right: 85,
+                top: 420,
+                display: "flex",
+                gap: 12,
+              }}
+            >
+              {player.champions.map((c) => (
+                <div
+                  key={c.hero}
+                  style={{
+                    background: p.bg + "dd",
+                    padding: 8,
+                    textAlign: "center",
+                    minWidth: 0,
+                    flex: 1,
+                  }}
+                >
+                  <Img
+                    src={asset(c.image)}
+                    style={{ width: 62, height: 62, objectFit: "cover" }}
+                  />
+                  <div style={{ fontSize: 14, marginTop: 4 }}>
+                    {c.hero} ×{c.games}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div
             style={{
               position: "absolute",
@@ -1212,9 +1489,15 @@ function RadarScene(props: Ctx) {
                 {pl.kills} / {pl.deaths} / {pl.assists}{" "}
                 <span style={{ fontSize: 18, color: p.dim }}>KDA</span>
                 <span style={{ marginLeft: 40 }}>
-                  {support ? axisValue(pl.healing) : num(pl.damage)}{" "}
+                  {support
+                    ? axisValue(m.game === "lol" ? pl.vision : pl.healing)
+                    : num(pl.damage)}{" "}
                   <span style={{ fontSize: 18, color: p.dim }}>
-                    {support ? "治疗" : "伤害"}
+                    {support
+                      ? m.game === "lol"
+                        ? "视野得分"
+                        : "治疗"
+                      : "伤害"}
                   </span>
                 </span>
               </div>
@@ -1232,9 +1515,13 @@ function RadarScene(props: Ctx) {
           >
             每轴以二人较高值为外圈。
             <br />
-            {support
-              ? "眼位为放置数，眩晕为累计秒数。"
-              : "比较本场数据，不作综合能力评级。"}
+            {m.series
+              ? "系列赛累计；轮换选手计入同位置。"
+              : support
+                ? m.game === "lol"
+                  ? "视野和眼位均为本局记录。"
+                  : "眼位为放置数，眩晕为累计秒数。"
+                : "比较本场数据，不作综合能力评级。"}
           </div>
         </div>
       )}
@@ -1253,7 +1540,9 @@ function RadarScene(props: Ctx) {
         <br />
         {support
           ? "KP =（击杀 + 助攻）/ 队伍击杀 · — 为缺失"
-          : "DPM = 英雄伤害 / 本场分钟数 · 非能力评分"}
+          : m.series
+            ? "DPM = 累计英雄伤害 / 出场总分钟数"
+            : "DPM = 英雄伤害 / 本场分钟数 · 非能力评分"}
       </div>
     </AbsoluteFill>
   );
@@ -1268,7 +1557,7 @@ function Damage(props: Ctx) {
   return (
     <AbsoluteFill>
       <Title en="04 / DAMAGE LEADERS" props={props}>
-        谁打出了最多伤害
+        {m.series ? "系列赛，谁贡献了最多输出" : "谁打出了最多伤害"}
       </Title>
       <HeroArt
         p={leader}
@@ -1283,7 +1572,9 @@ function Damage(props: Ctx) {
         }}
       />
       <div style={{ position: "absolute", top: 559, left: 85, width: 610 }}>
-        <Tag color={color}>全场英雄伤害第一</Tag>
+        <Tag color={color}>
+          {m.series ? "系列赛累计英雄伤害第一" : "全场英雄伤害第一"}
+        </Tag>
         <div
           style={{
             ...digits,
@@ -1311,7 +1602,7 @@ function Damage(props: Ctx) {
             letterSpacing: 2,
           }}
         >
-          <span>TOP 05 / 英雄伤害</span>
+          <span>TOP 05 / {m.series ? "选手累计英雄伤害" : "英雄伤害"}</span>
           <span>HERO DAMAGE</span>
         </div>
         {players.map((pl, i) => {
@@ -1379,7 +1670,9 @@ function Damage(props: Ctx) {
           );
         })}
         <div style={{ marginTop: 25, color: p.dim, fontSize: 20 }}>
-          不含建筑伤害 · 输出量不等于全部贡献
+          {m.series
+            ? "按选手分别累计 · 出场局数不同会影响总量"
+            : "不含建筑伤害 · 输出量不等于全部贡献"}
         </div>
       </div>
     </AbsoluteFill>
@@ -1390,7 +1683,7 @@ function Outro(props: Ctx) {
   const p = palettes[s.theme],
     f = facts(m),
     focus = getFocus(m),
-    winnerPlayer = focus[m.winner === "radiant" ? 0 : 1],
+    winnerPlayer = m.winner ? focus[m.winner === "radiant" ? 0 : 1] : f.top,
     color = teamColor(winnerPlayer, s);
   const frame = useCurrentFrame();
   return (
@@ -1407,7 +1700,7 @@ function Outro(props: Ctx) {
           letterSpacing: -9,
         }}
       >
-        VICTORY
+        {m.series ? "SERIES" : "VICTORY"}
       </div>
       <HeroArt
         p={winnerPlayer}
@@ -1422,25 +1715,41 @@ function Outro(props: Ctx) {
         }}
       />
       <div style={{ position: "absolute", left: 85, top: 282, width: 1030 }}>
-        <Tag color={color}>FINAL / 本局胜者</Tag>
+        <Tag color={color}>
+          {m.series
+            ? `SERIES / 已收录 ${m.series.games.length} 局`
+            : "FINAL / 本局胜者"}
+        </Tag>
         <div
           style={{
-            fontSize: fit(f.winner, 1000, 101),
+            fontSize: fit(
+              m.series ? m.radiant + " vs " + m.dire : f.winner,
+              1000,
+              101,
+            ),
             fontWeight: 900,
             lineHeight: 1.16,
             marginTop: 21,
           }}
         >
-          {f.winner}
+          {m.series ? m.radiant + " vs " + m.dire : f.winner}
         </div>
         <div
           style={{ width: 83, height: 5, background: color, margin: "34px 0" }}
         />
         <div style={{ display: "flex", gap: 55, marginTop: 37 }}>
           {[
-            ["比赛用时", matchDuration(m.duration)],
-            ["英雄击杀", m.radiantScore + " : " + m.direScore],
-            ["全场最高伤害", compact(f.top.damage)],
+            [
+              m.series ? "系列赛比分" : "比赛用时",
+              m.series
+                ? m.series.wins.radiant + " : " + m.series.wins.dire
+                : matchDuration(m.duration),
+            ],
+            [
+              m.series ? "累计英雄击杀" : "英雄击杀",
+              m.radiantScore + " : " + m.direScore,
+            ],
+            [m.series ? "最高累计伤害" : "全场最高伤害", compact(f.top.damage)],
           ].map(([label, value]) => (
             <div key={label}>
               <Tag color={p.dim}>{label}</Tag>
@@ -1476,7 +1785,11 @@ function Outro(props: Ctx) {
         }}
       >
         <span>{m.league}</span>
-        <span style={{ fontFamily: mono }}>opendota.com/matches/{m.id}</span>
+        <span style={{ fontFamily: mono }}>
+          {m.game === "lol"
+            ? "oracleselixir.com · Riot Games"
+            : "opendota.com/matches/" + m.id}
+        </span>
       </div>
     </AbsoluteFill>
   );
@@ -1491,7 +1804,13 @@ function FilmScene(props: Ctx) {
       extrapolateRight: "clamp",
     }),
   );
-  const Component = [Intro, Economy, RadarScene, Damage, Outro][props.index];
+  const Component = [
+    Intro,
+    props.match.game === "lol" ? TeamResources : Economy,
+    RadarScene,
+    Damage,
+    Outro,
+  ][props.index];
   return (
     <AbsoluteFill style={{ opacity }}>
       <Component {...props} />
@@ -1528,6 +1847,16 @@ export function MatchFilm(props: VideoProps) {
       style={{ fontFamily: font, color: p.ink, overflow: "hidden" }}
     >
       <Background {...props} />
+      {props.bgmTrack && s.bgm && (
+        <Audio
+          src={asset(props.bgmTrack.src)}
+          loop={s.bgm.loop}
+          loopVolumeCurveBehavior="extend"
+          volume={(audioFrame) =>
+            bgmVolume(audioFrame, total, props.bgmTrack!.duration, s.bgm!)
+          }
+        />
+      )}
       {segments.map((seg, i) => (
         <Sequence key={i} from={starts[i]} durationInFrames={seg.frames}>
           <FilmScene {...props} index={i} />
@@ -1567,11 +1896,11 @@ export function MatchFilm(props: VideoProps) {
               marginLeft: 17,
             }}
           >
-            MATCHCUT / DOTA 2
+            MATCHCUT / {m.game === "lol" ? "LEAGUE OF LEGENDS" : "DOTA 2"}
           </span>
         </div>
         <span style={{ fontFamily: mono, fontSize: 18, color: p.dim }}>
-          MATCH {m.id}{" "}
+          {m.series ? "SERIES" : "MATCH"} {m.id.replace(/^lol-/, "")}{" "}
           <span style={{ marginLeft: 26, color: s.accent }}>POST MATCH</span>
         </span>
       </div>
@@ -1614,13 +1943,18 @@ export function MatchFilm(props: VideoProps) {
         }}
       >
         <span>
-          OPENDOTA{" "}
+          {providerName(m).toUpperCase()}{" "}
           <span style={{ marginLeft: 17 }}>
-            单局数据 · {m.date.slice(0, 10)}
+            {m.series
+              ? `系列赛累计 · 已收录 ${m.series.games.length} 局`
+              : m.gameNumber
+                ? `单局数据 · G${m.gameNumber}`
+                : "单局数据"}{" "}
+            · {m.date.slice(0, 10)}
           </span>
         </span>
         <div style={{ display: "flex", gap: 25 }}>
-          {SCENES.map((scene, i) => (
+          {sceneNames(m).map((scene, i) => (
             <span
               key={scene}
               style={{

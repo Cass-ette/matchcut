@@ -4,6 +4,11 @@ export const FPS = 30;
 export const VIDEO_WIDTH = 1920;
 export const VIDEO_HEIGHT = 1080;
 export const DEFAULT_MATCH = "9035078952";
+export const DEFAULT_LOL_MATCH = "lol-LOLTMNT02_76144";
+export type Game = "dota2" | "lol";
+export const matchIdSchema = z
+  .string()
+  .regex(/^(?:\d{6,15}|lol-[A-Za-z0-9_-]{1,100})$/);
 export const SCENES = [
   "赛果开场",
   "经济走势",
@@ -21,8 +26,39 @@ export const POSITION_NAMES: Record<Position, string> = {
   4: "四号位 · 游走",
   5: "五号位 · 辅助",
 };
+export const LOL_POSITION_NAMES: Record<Position, string> = {
+  1: "上单 · TOP",
+  2: "打野 · JUNGLE",
+  3: "中单 · MID",
+  4: "下路 · ADC",
+  5: "辅助 · SUPPORT",
+};
+export const positionNames = (m: ReportData) =>
+  m.game === "lol" ? LOL_POSITION_NAMES : POSITION_NAMES;
+export const sceneNames = (m: ReportData) =>
+  m.series
+    ? ["系列赛比分", "累计资源", "对位雷达", "累计伤害", "系列赛定格"]
+    : m.game === "lol"
+      ? ["赛果开场", "团队资源", "选手雷达", "伤害排行", "赛后定格"]
+      : SCENES;
+export const gameName = (m: ReportData) =>
+  m.game === "lol" ? "英雄联盟" : "Dota 2";
+export const providerName = (m: ReportData) =>
+  m.game === "lol" ? "Oracle’s Elixir" : "OpenDota";
+export const sideName = (m: ReportData, side: "radiant" | "dire") =>
+  m.series
+    ? m[side]
+    : m.game === "lol"
+      ? side === "radiant"
+        ? "蓝方"
+        : "红方"
+      : side === "radiant"
+        ? "天辉"
+        : "夜魇";
+export const isSupport = (m: ReportData, position?: Position) =>
+  Boolean(position && (m.game === "lol" ? position === 5 : position >= 4));
 const positionOverridesSchema = z.object({
-  matchId: z.string().regex(/^\d{6,15}$/),
+  matchId: matchIdSchema,
   roles: z.record(
     z.string().regex(/^(?:[0-4]|12[89]|13[0-2])$/),
     z.number().int().min(0).max(5),
@@ -38,13 +74,27 @@ export const settingsSchema = z.object({
   outro: z.string().trim().max(56).default("下一场，继续见。"),
   pace: z.enum(["snappy", "standard", "relaxed"]).default("standard"),
   captions: z.boolean().default(true),
-  scripts: z.array(z.string().trim().min(1).max(240)).length(5),
+  scripts: z.array(z.string().trim().max(240)).length(5),
   resolution: z.enum(["1080", "720"]).default("1080"),
   radarMode: z.enum(["positions", "damage"]).default("positions"),
   radarPosition: z.enum(["all", "1", "2", "3", "4", "5"]).default("all"),
   positionOverrides: positionOverridesSchema.optional(),
+  bgm: z
+    .object({
+      trackId: z.string().regex(/^[a-f0-9]{64}$/),
+      volume: z.number().min(0).max(1).default(0.35),
+      loop: z.boolean().default(true),
+    })
+    .optional(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
+export type BgmTrack = {
+  id: string;
+  name: string;
+  duration: number;
+  src: string;
+  createdAt: string;
+};
 export type PlayerData = {
   slot: number;
   name: string;
@@ -57,17 +107,27 @@ export type PlayerData = {
   deaths: number;
   assists: number;
   gpm: number;
-  xpm: number;
+  xpm?: number;
   damage: number;
-  tower: number;
+  tower?: number;
   lastHits: number;
   positionEstimate?: Position;
+  declaredPosition?: Position;
+  wardsKilled?: number;
+  vision?: number;
+  controlWards?: number;
   obs?: number;
   sentries?: number;
   stuns?: number;
   healing?: number;
+  // Present only on a series aggregate. Rates use played time and team kills.
+  playedGames?: number;
+  playedDuration?: number;
+  teamKills?: number;
+  champions?: { hero: string; image: string; games: number }[];
 };
 export type MatchData = {
+  game?: Game;
   id: string;
   league: string;
   date: string;
@@ -83,14 +143,43 @@ export type MatchData = {
   gold: { minute: number; value: number }[];
   source: string;
   fetchedAt: string;
+  objectives?: { label: string; radiant?: number; dire?: number }[];
+  gameNumber?: number;
+  patch?: string;
+};
+export type SeriesDetails = {
+  games: Pick<
+    MatchData,
+    | "id"
+    | "date"
+    | "gameNumber"
+    | "radiant"
+    | "dire"
+    | "winner"
+    | "radiantScore"
+    | "direScore"
+    | "duration"
+    | "source"
+    | "fetchedAt"
+  >[];
+  wins: { radiant: number; dire: number };
+  missingGames: number[];
+  // Individual totals for damage ranking; report.players contains role totals.
+  players: PlayerData[];
+};
+export type ReportData = Omit<MatchData, "winner"> & {
+  // For a series this is the leader among recorded games, never an inferred champion.
+  winner: MatchData["winner"] | null;
+  series?: SeriesDetails;
 };
 export type Segment = { text: string; frames: number };
 export type Caption = { text: string; start: number; end: number };
 export type VideoProps = {
-  match: MatchData;
+  match: ReportData;
   settings: Settings;
   segments: Segment[];
   captions: Caption[];
+  bgmTrack?: BgmTrack;
 };
 
 const finite = (value: unknown, field: string, nonnegative = true): number => {
@@ -209,25 +298,27 @@ export const matchDuration = (s: number) =>
 export const num = (v: number) => Math.round(v).toLocaleString("en-US");
 export const compact = (v: number) =>
   Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : String(Math.round(v));
-export const getFocus = (m: MatchData): [PlayerData, PlayerData] => [
-  [...m.players]
+export const getFocus = (m: ReportData): [PlayerData, PlayerData] => [
+  [...(m.series?.players ?? m.players)]
     .filter((p) => p.side === "radiant")
     .sort((a, b) => b.damage - a.damage)[0],
-  [...m.players]
+  [...(m.series?.players ?? m.players)]
     .filter((p) => p.side === "dire")
     .sort((a, b) => b.damage - a.damage)[0],
 ];
 export type AssignedPlayer = {
   player: PlayerData;
   position?: Position;
-  source: "manual" | "estimate" | "unknown";
+  source: "manual" | "estimate" | "declared" | "unknown";
 };
 export function assignedPositions(
-  m: MatchData,
+  m: ReportData,
   s?: Settings,
 ): AssignedPlayer[] {
   const overrides =
-    s?.positionOverrides?.matchId === m.id ? s.positionOverrides.roles : {};
+    !m.series && s?.positionOverrides?.matchId === m.id
+      ? s.positionOverrides.roles
+      : {};
   const assigned = m.players.map((player) => {
     const manual = Object.prototype.hasOwnProperty.call(
       overrides,
@@ -235,11 +326,17 @@ export function assignedPositions(
     );
     const position = manual
       ? overrides[player.slot] || undefined
-      : player.positionEstimate;
+      : (player.declaredPosition ?? player.positionEstimate);
     return {
       player,
       position: position as Position | undefined,
-      source: position ? (manual ? "manual" : "estimate") : "unknown",
+      source: position
+        ? manual
+          ? "manual"
+          : player.declaredPosition
+            ? "declared"
+            : "estimate"
+        : "unknown",
     } as AssignedPlayer;
   });
   // An estimate is not a roster declaration. Ambiguous positions stay unresolved.
@@ -262,7 +359,7 @@ export type Comparison = {
   pair?: [PlayerData, PlayerData];
   provenance: string;
 };
-export function comparisons(m: MatchData, s: Settings): Comparison[] {
+export function comparisons(m: ReportData, s: Settings): Comparison[] {
   if (s.radarMode === "damage")
     return [
       {
@@ -286,7 +383,7 @@ export function comparisons(m: MatchData, s: Settings): Comparison[] {
     );
     return {
       key: String(position),
-      label: POSITION_NAMES[position],
+      label: positionNames(m)[position],
       position,
       pair:
         a && b ? ([a.player, b.player] as [PlayerData, PlayerData]) : undefined,
@@ -295,13 +392,17 @@ export function comparisons(m: MatchData, s: Settings): Comparison[] {
           ? "位置未确定 · 请修正对位"
           : a.source === "manual" && b.source === "manual"
             ? "位置：手动指定"
-            : a.source === "estimate" && b.source === "estimate"
-              ? "位置：OpenDota 估计"
-              : "位置：手动指定 / OpenDota 估计",
+            : m.game === "lol"
+              ? a.source === "declared" && b.source === "declared"
+                ? "位置：Oracle’s Elixir 记录"
+                : "位置：手动指定 / CSV 记录"
+              : a.source === "estimate" && b.source === "estimate"
+                ? "位置：OpenDota 估计"
+                : "位置：手动指定 / OpenDota 估计",
     };
   });
 }
-export function assertComparisons(m: MatchData, s: Settings) {
+export function assertComparisons(m: ReportData, s: Settings) {
   const missing = comparisons(m, s).filter((c) => !c.pair);
   if (missing.length)
     throw new Error(
@@ -310,15 +411,27 @@ export function assertComparisons(m: MatchData, s: Settings) {
     );
 }
 export const participation = (
-  m: MatchData,
+  m: ReportData,
   player: PlayerData,
 ): number | undefined => {
-  const kills = player.side === "radiant" ? m.radiantScore : m.direScore;
+  const kills =
+    player.teamKills ??
+    (player.side === "radiant" ? m.radiantScore : m.direScore);
   return kills > 0
     ? ((player.kills + player.assists) / kills) * 100
     : undefined;
 };
-export function comparisonScript(m: MatchData, s: Settings) {
+export function comparisonScript(m: ReportData, s: Settings) {
+  if (m.series) {
+    if (s.radarMode === "damage")
+      return "双方累计伤害最高选手对比。累计值按已收录局统计，每分钟指标按选手出场时长计算。";
+    return (
+      (s.radarPosition === "all"
+        ? "按上、野、中、下、辅汇总已收录局的同位置数据"
+        : comparisons(m, s)[0].label + "对位：汇总已收录局的同位置数据") +
+      "；轮换选手共同计入该位置。每分钟指标按总时长计算，非能力评分。"
+    );
+  }
   if (s.radarMode === "damage") {
     const [a, b] = getFocus(m);
     return (
@@ -326,7 +439,9 @@ export function comparisonScript(m: MatchData, s: Settings) {
     );
   }
   if (s.radarPosition === "all")
-    return "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。";
+    return m.game === "lol"
+      ? "从上单、打野到中单、下路、辅助，逐组看双方本场表现。各轴为对位相对值，非能力评分。"
+      : "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。";
   const comparison = comparisons(m, s)[0];
   return (
     comparison.label +
@@ -336,7 +451,7 @@ export function comparisonScript(m: MatchData, s: Settings) {
   );
 }
 export function refreshSettings(
-  m: MatchData,
+  m: ReportData,
   previous: Settings,
   keepOverrides = false,
 ): Settings {
@@ -344,21 +459,30 @@ export function refreshSettings(
   const settings = {
     ...previous,
     headline: defaults.headline,
-    scripts: [...defaults.scripts],
+    scripts: defaults.scripts.map((text, i) =>
+      previous.scripts[i].trim() ? text : "",
+    ),
     positionOverrides:
       keepOverrides && previous.positionOverrides?.matchId === m.id
         ? previous.positionOverrides
         : undefined,
   };
-  settings.scripts[2] = comparisonScript(m, settings);
+  if (previous.scripts[2].trim())
+    settings.scripts[2] = comparisonScript(m, settings);
   return settings;
 }
-export const sortedDamage = (m: MatchData) =>
-  [...m.players].sort((a, b) => b.damage - a.damage);
-export function facts(m: MatchData) {
-  const max = m.gold.reduce((a, b) => (b.value > a.value ? b : a));
-  const min = m.gold.reduce((a, b) => (b.value < a.value ? b : a));
-  const winner = m[m.winner];
+export const sortedDamage = (m: ReportData) =>
+  [...(m.series?.players ?? m.players)].sort((a, b) => b.damage - a.damage);
+export function facts(m: ReportData) {
+  const max = m.gold.reduce(
+    (a, b) => (b.value > a.value ? b : a),
+    m.gold[0] ?? { minute: 0, value: 0 },
+  );
+  const min = m.gold.reduce(
+    (a, b) => (b.value < a.value ? b : a),
+    m.gold[0] ?? { minute: 0, value: 0 },
+  );
+  const winner = m.winner ? m[m.winner] : "双方战平";
   const deficit =
     m.winner === "radiant" ? Math.max(0, -min.value) : Math.max(0, max.value);
   return {
@@ -370,24 +494,51 @@ export function facts(m: MatchData) {
     final: m.gold[m.gold.length - 1],
   };
 }
-export function defaultSettings(m: MatchData): Settings {
+export function defaultSettings(m: ReportData): Settings {
   const f = facts(m);
+  if (m.series) {
+    const { wins, games, missingGames } = m.series;
+    const score = `${m.radiant} ${wins.radiant} : ${wins.dire} ${m.dire}`;
+    const scope =
+      `已收录 ${games.length} 局` +
+      (missingGames.length ? `，缺少 G${missingGames.join("、G")}` : "");
+    const result = settingsSchema.parse({
+      theme: "obsidian",
+      accent: "#f6c453",
+      secondary: "#c4d0e4",
+      headline: score.length <= 44 ? score : "系列赛累计 · 对局回顾",
+      scripts: [
+        `${scope}。比分 ${score}。按战队归并换边数据，以下仅统计已收录局。`,
+        "系列赛累计资源：各局终局总经济、小龙、大龙与防御塔相加；缺失项不计作零。",
+        "系列赛对位累计。",
+        `${f.top.name} 累计打出 ${num(f.top.damage)} 点英雄伤害，出场 ${f.top.playedGames} 局。榜单按选手分别统计，输出量不等于全部贡献。`,
+        `${scope}，比分 ${wins.radiant} : ${wins.dire}。数据来源 Oracle’s Elixir。`,
+      ],
+    });
+    result.scripts[2] = comparisonScript(m, result);
+    return result;
+  }
   const winKills = m.winner === "radiant" ? m.radiantScore : m.direScore;
   const loseKills = m.winner === "radiant" ? m.direScore : m.radiantScore;
   const economic =
-    f.max.value > 0 && f.min.value < 0
-      ? "经济优势曾易手。天辉最大领先 " +
-        num(f.max.value) +
-        "，夜魇最大领先 " +
-        num(-f.min.value) +
-        "。"
-      : (f.max.value <= 0 ? m.dire : m.radiant) +
-        "在经济采样中保持优势。最大的经济差达到" +
-        num(Math.max(Math.abs(f.max.value), Math.abs(f.min.value))) +
-        "。";
+    m.game === "lol"
+      ? "终局资源对比：总经济、小龙、大龙与防御塔。这里展示累计结果，不代表资源获取过程。"
+      : f.max.value > 0 && f.min.value < 0
+        ? "经济优势曾易手。天辉最大领先 " +
+          num(f.max.value) +
+          "，夜魇最大领先 " +
+          num(-f.min.value) +
+          "。"
+        : (f.max.value <= 0 ? m.dire : m.radiant) +
+          "在经济采样中保持优势。最大的经济差达到" +
+          num(Math.max(Math.abs(f.max.value), Math.abs(f.min.value))) +
+          "。";
   return settingsSchema.parse({
+    ...(m.game === "lol"
+      ? { theme: "obsidian", accent: "#f6c453", secondary: "#c4d0e4" }
+      : {}),
     headline:
-      f.deficit >= 2000
+      m.game !== "lol" && f.deficit >= 2000
         ? "落后 " + compact(f.deficit) + "，依然拿下"
         : f.winner + " 拿下胜利",
     scripts: [
@@ -400,7 +551,9 @@ export function defaultSettings(m: MatchData): Settings {
         loseKills +
         "。",
       economic,
-      "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。",
+      m.game === "lol"
+        ? "从上单、打野到中单、下路、辅助，逐组看双方本场表现。各轴为对位相对值，非能力评分。"
+        : "从一号位到五号位，逐组看双方本场表现。核心与辅助使用不同指标，各轴为对位相对值。",
       f.top.name +
         " 打出 " +
         num(f.top.damage) +
@@ -410,7 +563,7 @@ export function defaultSettings(m: MatchData): Settings {
   });
 }
 export function radar(
-  m: MatchData,
+  m: ReportData,
   pair: [PlayerData, PlayerData] = getFocus(m),
   position?: Position,
 ) {
@@ -421,32 +574,69 @@ export function radar(
     b: number | undefined;
     unit?: string;
   }[] =
-    position && position >= 4
-      ? [
-          { label: "助攻 / AST", a: a.assists, b: b.assists },
-          {
-            label: "参战率 / KP",
-            a: participation(m, a),
-            b: participation(m, b),
-            unit: "%",
-          },
-          { label: "观察守卫", a: a.obs, b: b.obs },
-          { label: "岗哨守卫", a: a.sentries, b: b.sentries },
-          { label: "眩晕时长", a: a.stuns, b: b.stuns, unit: "s" },
-          { label: "英雄治疗", a: a.healing, b: b.healing },
-        ]
-      : [
-          { label: "击杀", a: a.kills, b: b.kills },
-          { label: "助攻", a: a.assists, b: b.assists },
-          { label: "经济 / 分", a: a.gpm, b: b.gpm },
-          { label: "经验 / 分", a: a.xpm, b: b.xpm },
-          {
-            label: "伤害 / 分",
-            a: a.damage / (m.duration / 60),
-            b: b.damage / (m.duration / 60),
-          },
-          { label: "建筑伤害", a: a.tower, b: b.tower },
-        ];
+    m.game === "lol"
+      ? isSupport(m, position)
+        ? [
+            { label: "助攻 / AST", a: a.assists, b: b.assists },
+            {
+              label: "参团率 / KP",
+              a: participation(m, a),
+              b: participation(m, b),
+              unit: "%",
+            },
+            { label: "视野得分", a: a.vision, b: b.vision },
+            { label: "放置守卫", a: a.obs, b: b.obs },
+            { label: "排除守卫", a: a.wardsKilled, b: b.wardsKilled },
+            { label: "购买控制守卫", a: a.controlWards, b: b.controlWards },
+          ]
+        : [
+            { label: "击杀 / KILLS", a: a.kills, b: b.kills },
+            { label: "助攻 / AST", a: a.assists, b: b.assists },
+            { label: "总经济 / 分", a: a.gpm, b: b.gpm },
+            {
+              label: "补刀 / 分",
+              a: a.lastHits / ((a.playedDuration ?? m.duration) / 60),
+              b: b.lastHits / ((b.playedDuration ?? m.duration) / 60),
+              unit: " CS",
+            },
+            {
+              label: "伤害 / 分",
+              a: a.damage / ((a.playedDuration ?? m.duration) / 60),
+              b: b.damage / ((b.playedDuration ?? m.duration) / 60),
+            },
+            {
+              label: "参团率 / KP",
+              a: participation(m, a),
+              b: participation(m, b),
+              unit: "%",
+            },
+          ]
+      : isSupport(m, position)
+        ? [
+            { label: "助攻 / AST", a: a.assists, b: b.assists },
+            {
+              label: "参战率 / KP",
+              a: participation(m, a),
+              b: participation(m, b),
+              unit: "%",
+            },
+            { label: "观察守卫", a: a.obs, b: b.obs },
+            { label: "岗哨守卫", a: a.sentries, b: b.sentries },
+            { label: "眩晕时长", a: a.stuns, b: b.stuns, unit: "s" },
+            { label: "英雄治疗", a: a.healing, b: b.healing },
+          ]
+        : [
+            { label: "击杀", a: a.kills, b: b.kills },
+            { label: "助攻", a: a.assists, b: b.assists },
+            { label: "经济 / 分", a: a.gpm, b: b.gpm },
+            { label: "经验 / 分", a: a.xpm, b: b.xpm },
+            {
+              label: "伤害 / 分",
+              a: a.damage / ((a.playedDuration ?? m.duration) / 60),
+              b: b.damage / ((b.playedDuration ?? m.duration) / 60),
+            },
+            { label: "建筑伤害", a: a.tower, b: b.tower },
+          ];
   return axes.map((x) => ({
     ...x,
     ar:
@@ -497,6 +687,10 @@ export function makeCaptions(segments: Segment[]): Caption[] {
   const result: Caption[] = [];
   let offset = 0;
   segments.forEach((seg) => {
+    if (!seg.text.trim()) {
+      offset += seg.frames;
+      return;
+    }
     const pieces = captionLines(seg.text);
     const count = pieces.reduce((s, x) => s + x.length, 0);
     let cursor = offset + 8;
@@ -513,7 +707,11 @@ export function makeCaptions(segments: Segment[]): Caption[] {
   });
   return result;
 }
-export function previewProps(match: MatchData, settings: Settings): VideoProps {
+export function previewProps(
+  match: ReportData,
+  settings: Settings,
+  bgmTrack?: BgmTrack,
+): VideoProps {
   const groups = comparisons(match, settings);
   const base = [7, 10, groups.length > 1 ? groups.length * 18 : 24, 10, 7];
   const speed = { snappy: 0.82, standard: 1, relaxed: 1.2 }[settings.pace];
@@ -537,12 +735,37 @@ export function previewProps(match: MatchData, settings: Settings): VideoProps {
         "：" +
         (group.pair?.map((p) => p.name).join(" vs ") || "对位待修正") +
         "。" +
-        (group.position && group.position >= 4
-          ? "助攻、参战、眼位、眩晕和治疗，看辅助的本场贡献。"
-          : "经济、经验、输出与推塔，看同位置的本场表现。"),
+        (match.series
+          ? "系列赛同位置累计；每分钟指标按出场时长计算，轮换选手共同计入该位置。"
+          : match.game === "lol"
+            ? isSupport(match, group.position)
+              ? "助攻、参团与视野数据，看辅助的本场贡献。"
+              : "经济、补刀、输出与参团，看同位置的本场表现。"
+            : isSupport(match, group.position)
+              ? "助攻、参战、眼位、眩晕和治疗，看辅助的本场贡献。"
+              : "经济、经验、输出与推塔，看同位置的本场表现。"),
     }));
   });
-  return { match, settings, segments, captions: makeCaptions(captionSegments) };
+  return {
+    match,
+    settings,
+    segments,
+    captions: makeCaptions(captionSegments),
+    ...(bgmTrack && settings.bgm?.trackId === bgmTrack.id ? { bgmTrack } : {}),
+  };
+}
+export function bgmVolume(
+  frame: number,
+  total: number,
+  duration: number,
+  bgm: NonNullable<Settings["bgm"]>,
+) {
+  const end = bgm.loop ? total : Math.min(total, Math.ceil(duration * FPS));
+  const fade = Math.min(FPS * 1.5, end / 2);
+  return (
+    bgm.volume *
+    Math.max(0, Math.min(1, frame / fade, (end - 1 - frame) / fade))
+  );
 }
 export function srt(captions: Caption[]) {
   const time = (frames: number) => {

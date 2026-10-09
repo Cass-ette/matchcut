@@ -20,6 +20,7 @@
     "@remotion/cli": "4.0.534",
     "@remotion/player": "4.0.534",
     "@remotion/renderer": "4.0.534",
+    "csv-parse": "^7.0.3",
     "express": "^5.1.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

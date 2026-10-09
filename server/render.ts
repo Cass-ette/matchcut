@@ -7,6 +7,7 @@ import {
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { resolveBgm } from "./audio-source";
 import {
   FPS,
   VIDEO_WIDTH,
@@ -14,12 +15,13 @@ import {
   assertComparisons,
   assignedPositions,
   comparisons,
-  MatchData,
+  ReportData,
   Settings,
   VideoProps,
   previewProps,
   srt,
   totalFrames,
+  providerName,
 } from "../src/domain";
 
 const root = process.cwd();
@@ -79,7 +81,7 @@ export function invalidateBundle() {
 }
 export async function runRender(
   job: Job,
-  match: MatchData,
+  match: ReportData,
   raw: any,
   settings: Settings,
   origin: string,
@@ -93,7 +95,8 @@ export async function runRender(
     job.message = "按阅读节奏编排字幕与镜头";
     job.progress = 5;
     await update();
-    const props = previewProps(match, settings);
+    const bgmTrack = await resolveBgm(settings);
+    const props = previewProps(match, settings, bgmTrack);
     const { segments, captions } = props;
     job.props = props;
     assertComparisons(match, settings);
@@ -127,7 +130,8 @@ export async function runRender(
       concurrency: Math.max(1, Math.min(4, os.cpus().length - 1)),
       crf: 19,
       pixelFormat: "yuv420p",
-      muted: true,
+      muted: !bgmTrack,
+      ...(bgmTrack ? { audioCodec: "aac" as const, audioBitrate: "192k" } : {}),
       scale: settings.resolution === "720" ? 2 / 3 : 1,
       timeoutInMilliseconds: 120000,
       onProgress: ({ progress }) => {
@@ -156,12 +160,17 @@ export async function runRender(
       path.join(folder, "project.json"),
       JSON.stringify(
         {
-          schemaVersion: 3,
+          schemaVersion: 6,
+          game: match.game || "dota2",
           aspectRatio: "16:9",
           width: job.width,
           height: job.height,
           matchId: match.id,
+          reportMode: match.series ? "series" : "game",
+          gameIds: match.series?.games.map((g) => g.id),
+          series: match.series,
           settings,
+          backgroundMusic: bgmTrack || null,
           segments,
           frames: totalFrames(segments),
           fps: FPS,
@@ -186,7 +195,9 @@ export async function runRender(
       path.join(folder, "source.json"),
       JSON.stringify(
         {
-          provider: "OpenDota",
+          provider: providerName(match),
+          reportMode: match.series ? "series" : "game",
+          games: match.series?.games,
           url: match.source,
           fetchedAt: match.fetchedAt,
           generatedAt: new Date().toISOString(),
@@ -205,6 +216,9 @@ export async function runRender(
         match.dire +
         " · " +
         match.league +
+        (match.series
+          ? `\n系列赛累计 · 已收录 ${match.series.games.length} 局 · 比分 ${match.series.wins.radiant} : ${match.series.wins.dire}\nG${match.series.games.map((g) => g.gameNumber || "?").join(" / G")}\n对位按位置累计；伤害榜按选手累计。每分钟值按出场时长计算，参团率按出场局的队伍击杀计算。`
+          : "") +
         "\n数据来源：" +
         match.source +
         "\n雷达各轴按对比二人较高值归一化，非综合能力评分。\n" +

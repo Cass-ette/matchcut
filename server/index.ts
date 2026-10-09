@@ -13,6 +13,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   DEFAULT_MATCH,
+  DEFAULT_LOL_MATCH,
+  matchIdSchema,
   defaultSettings,
   refreshSettings,
   settingsSchema,
@@ -24,6 +26,16 @@ import {
   recentMatches,
 } from "./source";
 import { Job, runRender } from "./render";
+import {
+  importLolCsv,
+  listLolMatches,
+  loadLolMatch,
+  loadLolSeries,
+} from "./lol-source";
+import { importBgm, listBgm, resolveBgm } from "./audio-source";
+
+const loadAnyMatch = (id: string) =>
+  id.startsWith("lol-") ? loadLolMatch(id) : loadMatch(id);
 
 const root = process.cwd(),
   port = Number(process.env.PORT || 4317),
@@ -72,18 +84,36 @@ app.get("/api/health", (_req, res) =>
 );
 app.get(
   "/api/bootstrap",
-  wrap(async (_req, res) => {
-    const data = await loadMatch(DEFAULT_MATCH);
+  wrap(async (req, res) => {
+    const lol = req.query.game === "lol";
     let saved = null;
     try {
       saved = JSON.parse(
-        await readFile(path.join(root, "data/preferences.json"), "utf8"),
+        await readFile(
+          path.join(
+            root,
+            lol ? "data/preferences-lol.json" : "data/preferences.json",
+          ),
+          "utf8",
+        ),
       );
     } catch {}
+    const selected =
+      lol &&
+      matchIdSchema.safeParse(saved?.matchId).success &&
+      saved.matchId.startsWith("lol-")
+        ? saved.matchId
+        : lol
+          ? DEFAULT_LOL_MATCH
+          : DEFAULT_MATCH;
+    const data = await (lol && saved?.reportMode === "series"
+      ? loadLolSeries(selected)
+      : loadAnyMatch(selected));
     res.json({
       match: data.match,
       settings: defaultSettings(data.match),
       preferences: saved,
+      bgmTracks: await listBgm(),
       jobs: [...jobs.values()]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 12),
@@ -93,12 +123,58 @@ app.get(
 app.get(
   "/api/matches/:id",
   wrap(async (req, res) => {
-    const data = await loadMatch(String(req.params.id));
+    const data = await loadAnyMatch(String(req.params.id));
     res.json({
       match: data.match,
       settings: defaultSettings(data.match),
       cached: data.cached,
     });
+  }),
+);
+app.get(
+  "/api/bgm",
+  wrap(async (_req, res) => res.json(await listBgm())),
+);
+app.post(
+  "/api/bgm",
+  express.raw({ type: "application/octet-stream", limit: "100mb" }),
+  wrap(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw new Error("请选择音乐文件。");
+    res.json(
+      await importBgm(req.body, String(req.query.filename || "我的 BGM")),
+    );
+  }),
+);
+app.get(
+  "/api/lol/matches",
+  wrap(async (_req, res) => res.json(await listLolMatches())),
+);
+app.get(
+  "/api/lol/series/:id",
+  wrap(async (req, res) => {
+    const gameIds = req.query.games
+      ? z
+          .array(matchIdSchema)
+          .min(1)
+          .max(15)
+          .parse(String(req.query.games).split(","))
+      : undefined;
+    const data = await loadLolSeries(String(req.params.id), gameIds);
+    res.json({
+      match: data.match,
+      settings: defaultSettings(data.match),
+      cached: true,
+    });
+  }),
+);
+app.post(
+  "/api/lol/import",
+  express.raw({ type: "text/csv", limit: "256mb" }),
+  wrap(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw new Error("请选择 CSV 文件。");
+    res.json(
+      await importLolCsv(req.body, String(req.query.filename || "import.csv")),
+    );
   }),
 );
 app.get(
@@ -148,6 +224,8 @@ app.get("/api/jobs/:id", (req, res) => {
   res.json(job);
 });
 const prefSchema = z.object({
+  reportMode: z.enum(["game", "series"]).default("game"),
+  matchId: matchIdSchema.optional(),
   settings: settingsSchema,
   source: z.enum(["current", "latest"]),
   leagueId: z
@@ -164,7 +242,12 @@ app.put(
   wrap(async (req, res) => {
     const prefs = prefSchema.parse(req.body);
     await writeFile(
-      path.join(root, "data/preferences.json"),
+      path.join(
+        root,
+        req.query.game === "lol"
+          ? "data/preferences-lol.json"
+          : "data/preferences.json",
+      ),
       JSON.stringify(prefs, null, 2),
     );
     res.json({ ok: true });
@@ -183,7 +266,9 @@ app.post(
     }
     const body = z
       .object({
-        matchId: z.string().regex(/^\d{6,15}$/),
+        matchId: matchIdSchema,
+        reportMode: z.enum(["game", "series"]).default("game"),
+        gameIds: z.array(matchIdSchema).min(1).max(15).optional(),
         settings: settingsSchema,
         source: z.enum(["current", "latest"]).default("current"),
         leagueId: z
@@ -196,6 +281,26 @@ app.post(
           .default(""),
       })
       .parse(req.body);
+    if (
+      body.reportMode === "series" &&
+      (!body.matchId.startsWith("lol-") ||
+        body.source !== "current" ||
+        !body.gameIds)
+    ) {
+      res
+        .status(400)
+        .json({
+          error: "系列赛请使用已导入的英雄联盟比赛，并指定已预览的局数。",
+        });
+      return;
+    }
+    if (body.matchId.startsWith("lol-") && body.source === "latest") {
+      res.status(400).json({
+        error: "英雄联盟暂未接通自动最新数据，请从已导入的比赛生成。",
+      });
+      return;
+    }
+    await resolveBgm(body.settings);
     const id =
       new Date().toISOString().replace(/[:.]/g, "-") +
       "-" +
@@ -232,7 +337,9 @@ app.post(
                 body.leagueId || undefined,
                 body.teamId || undefined,
               )
-            : await loadMatch(body.matchId);
+            : body.reportMode === "series"
+              ? await loadLolSeries(body.matchId, body.gameIds)
+              : await loadAnyMatch(body.matchId);
         // Auto mode always recomputes match-specific copy, so a previous match's text cannot leak into the new report.
         const settings =
           body.source === "latest"

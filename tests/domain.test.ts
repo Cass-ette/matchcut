@@ -17,6 +17,7 @@ import {
   assertComparisons,
   refreshSettings,
   comparisonScript,
+  makeCaptions,
 } from "../src/domain";
 const fixture = JSON.parse(
   readFileSync("data/fixtures/9035078952.json", "utf8"),
@@ -229,4 +230,23 @@ test("subtitle wrapping never splits a score, a thousands-grouped value, or a La
       lines.some((line) => line.includes(token)),
       token,
     );
+});
+test("blank scripts are valid and omit captions without collapsing scene timing", () => {
+  const m = match();
+  const settings = settingsSchema.parse({
+    ...defaultSettings(m),
+    scripts: ["", "  ", "", "", ""],
+  });
+  const props = previewProps(m, settings);
+  assert.equal(props.segments.length, 5);
+  assert.ok(props.segments.every((s) => s.frames > 0));
+  assert.deepEqual(props.captions, []);
+  assert.deepEqual(refreshSettings(m, settings).scripts, ["", "", "", "", ""]);
+  assert.equal(srt(props.captions), "");
+  const mixed = makeCaptions([
+    { text: "", frames: 120 },
+    { text: "第二幕字幕", frames: 180 },
+  ]);
+  assert.equal(mixed[0].start, 128);
+  assert.equal(mixed.at(-1)!.end, 288);
 });

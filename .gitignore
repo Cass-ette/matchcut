@@ -4,6 +4,8 @@ dist/
 output/
 data/cache/
 data/preferences.json
+data/preferences-lol.json
+/public/assets/bgm/
 .DS_Store
 *.log
 # Downloaded artwork is a local cache; the bundled sample remains tracked.
