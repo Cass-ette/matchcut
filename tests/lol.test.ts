@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { normalizeLol, OracleRow } from "../src/lol";
+import { championFor, normalizeLol, OracleRow } from "../src/lol";
+import sharp from "sharp";
 import {
   defaultSettings,
   comparisons,
@@ -23,6 +24,33 @@ const catalog = JSON.parse(
 );
 const rows = (): OracleRow[] => structuredClone(fixture.rows);
 const match = () => normalizeLol(rows(), catalog, fixture.fetchedAt);
+test("all catalog champions have decodable local portraits and artwork, including new releases", async () => {
+  const entries = Object.values(catalog.data) as {
+    id: string;
+    key: string;
+    name: string;
+  }[];
+  assert.equal(new Set(entries.map((c) => c.key)).size, entries.length);
+  for (const champion of entries) {
+    assert.equal(championFor(champion.name, catalog)?.key, champion.key);
+    assert.equal(championFor(champion.id, catalog)?.key, champion.key);
+    const portrait = await sharp(
+      `public/assets/lol/${champion.id}.png`,
+    ).metadata();
+    const artwork = await sharp(
+      `public/assets/lol/${champion.id}.jpg`,
+    ).metadata();
+    assert.equal(portrait.format, "png", champion.name);
+    assert.ok(portrait.width! > 0 && portrait.height! > 0, champion.name);
+    assert.equal(artwork.format, "jpeg", champion.name);
+    assert.ok(artwork.width! > 0 && artwork.height! > 0, champion.name);
+  }
+  for (const name of ["Ambessa", "Mel", "Yunara", "Zaahen", "Locke"])
+    assert.ok(
+      championFor(name, catalog),
+      `${name} is missing from the catalog`,
+    );
+});
 const csv = (data: OracleRow[]) => {
   const keys = Object.keys(data[0]);
   const escape = (v: string) => '"' + v.replaceAll('"', '""') + '"';

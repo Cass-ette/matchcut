@@ -1,5 +1,12 @@
 {
-  "version": "14.18.1",
+  "version": "16.20.1",
+  "source": {
+    "provider": "Riot Data Dragon",
+    "catalogUrl": "https://ddragon.leagueoflegends.com/cdn/16.20.1/data/en_US/champion.json",
+    "fetchedAt": "2026-10-09T11:44:10.150Z",
+    "iconUrlTemplate": "https://ddragon.leagueoflegends.com/cdn/16.20.1/img/champion/{id}.png",
+    "artworkUrlTemplate": "https://ddragon.leagueoflegends.com/cdn/img/champion/loading/{id}_0.jpg"
+  },
   "data": {
     "Aatrox": {
       "id": "Aatrox",
@@ -26,6 +33,11 @@
       "key": "12",
       "name": "Alistar"
     },
+    "Ambessa": {
+      "id": "Ambessa",
+      "key": "799",
+      "name": "Ambessa"
+    },
     "Amumu": {
       "id": "Amumu",
       "key": "32",
@@ -51,7 +63,7 @@
       "key": "22",
       "name": "Ashe"
     },
-    "Aurelion Sol": {
+    "AurelionSol": {
       "id": "AurelionSol",
       "key": "136",
       "name": "Aurelion Sol"
@@ -71,7 +83,7 @@
       "key": "432",
       "name": "Bard"
     },
-    "Bel'Veth": {
+    "Belveth": {
       "id": "Belveth",
       "key": "200",
       "name": "Bel'Veth"
@@ -111,7 +123,7 @@
       "key": "69",
       "name": "Cassiopeia"
     },
-    "Cho'Gath": {
+    "Chogath": {
       "id": "Chogath",
       "key": "31",
       "name": "Cho'Gath"
@@ -136,7 +148,7 @@
       "key": "119",
       "name": "Draven"
     },
-    "Dr. Mundo": {
+    "DrMundo": {
       "id": "DrMundo",
       "key": "36",
       "name": "Dr. Mundo"
@@ -246,7 +258,7 @@
       "key": "40",
       "name": "Janna"
     },
-    "Jarvan IV": {
+    "JarvanIV": {
       "id": "JarvanIV",
       "key": "59",
       "name": "Jarvan IV"
@@ -271,7 +283,7 @@
       "key": "222",
       "name": "Jinx"
     },
-    "Kai'Sa": {
+    "Kaisa": {
       "id": "Kaisa",
       "key": "145",
       "name": "Kai'Sa"
@@ -316,7 +328,7 @@
       "key": "85",
       "name": "Kennen"
     },
-    "Kha'Zix": {
+    "Khazix": {
       "id": "Khazix",
       "key": "121",
       "name": "Kha'Zix"
@@ -331,22 +343,22 @@
       "key": "240",
       "name": "Kled"
     },
-    "Kog'Maw": {
+    "KogMaw": {
       "id": "KogMaw",
       "key": "96",
       "name": "Kog'Maw"
     },
-    "K'Sante": {
+    "KSante": {
       "id": "KSante",
       "key": "897",
       "name": "K'Sante"
     },
-    "LeBlanc": {
+    "Leblanc": {
       "id": "Leblanc",
       "key": "7",
       "name": "LeBlanc"
     },
-    "Lee Sin": {
+    "LeeSin": {
       "id": "LeeSin",
       "key": "64",
       "name": "Lee Sin"
@@ -365,6 +377,11 @@
       "id": "Lissandra",
       "key": "127",
       "name": "Lissandra"
+    },
+    "Locke": {
+      "id": "Locke",
+      "key": "805",
+      "name": "Locke"
     },
     "Lucian": {
       "id": "Lucian",
@@ -396,22 +413,27 @@
       "key": "57",
       "name": "Maokai"
     },
-    "Master Yi": {
+    "MasterYi": {
       "id": "MasterYi",
       "key": "11",
       "name": "Master Yi"
+    },
+    "Mel": {
+      "id": "Mel",
+      "key": "800",
+      "name": "Mel"
     },
     "Milio": {
       "id": "Milio",
       "key": "902",
       "name": "Milio"
     },
-    "Miss Fortune": {
+    "MissFortune": {
       "id": "MissFortune",
       "key": "21",
       "name": "Miss Fortune"
     },
-    "Wukong": {
+    "MonkeyKing": {
       "id": "MonkeyKing",
       "key": "62",
       "name": "Wukong"
@@ -466,7 +488,7 @@
       "key": "56",
       "name": "Nocturne"
     },
-    "Nunu & Willump": {
+    "Nunu": {
       "id": "Nunu",
       "key": "20",
       "name": "Nunu & Willump"
@@ -521,7 +543,7 @@
       "key": "33",
       "name": "Rammus"
     },
-    "Rek'Sai": {
+    "RekSai": {
       "id": "RekSai",
       "key": "421",
       "name": "Rek'Sai"
@@ -531,7 +553,7 @@
       "key": "526",
       "name": "Rell"
     },
-    "Renata Glasc": {
+    "Renata": {
       "id": "Renata",
       "key": "888",
       "name": "Renata Glasc"
@@ -651,7 +673,7 @@
       "key": "134",
       "name": "Syndra"
     },
-    "Tahm Kench": {
+    "TahmKench": {
       "id": "TahmKench",
       "key": "223",
       "name": "Tahm Kench"
@@ -696,7 +718,7 @@
       "key": "23",
       "name": "Tryndamere"
     },
-    "Twisted Fate": {
+    "TwistedFate": {
       "id": "TwistedFate",
       "key": "4",
       "name": "Twisted Fate"
@@ -731,7 +753,7 @@
       "key": "45",
       "name": "Veigar"
     },
-    "Vel'Koz": {
+    "Velkoz": {
       "id": "Velkoz",
       "key": "161",
       "name": "Vel'Koz"
@@ -781,7 +803,7 @@
       "key": "101",
       "name": "Xerath"
     },
-    "Xin Zhao": {
+    "XinZhao": {
       "id": "XinZhao",
       "key": "5",
       "name": "Xin Zhao"
@@ -801,10 +823,20 @@
       "key": "83",
       "name": "Yorick"
     },
+    "Yunara": {
+      "id": "Yunara",
+      "key": "804",
+      "name": "Yunara"
+    },
     "Yuumi": {
       "id": "Yuumi",
       "key": "350",
       "name": "Yuumi"
+    },
+    "Zaahen": {
+      "id": "Zaahen",
+      "key": "904",
+      "name": "Zaahen"
     },
     "Zac": {
       "id": "Zac",
