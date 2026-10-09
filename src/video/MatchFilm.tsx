@@ -46,6 +46,8 @@ import {
 
 const font = '"Arial", "PingFang SC", "Microsoft YaHei", sans-serif';
 const display = '"Orbitron", "Arial Black", "Arial", "PingFang SC", sans-serif';
+const heading =
+  '"Orbitron", "ZCOOL QingKe HuangYou", "Arial Black", "PingFang SC", sans-serif';
 const mono = '"SF Mono", "Menlo", monospace';
 export const palettes = {
   obsidian: {
@@ -99,6 +101,9 @@ const fit = (text: string, max: number, base: number) =>
         [...text].reduce((n, c) => n + (c.charCodeAt(0) > 255 ? 1 : 0.62), 0),
       ),
   );
+// Orbitron's wide letterforms need more room than the body font.
+const fitDisplay = (text: string, max: number, base: number) =>
+  fit(text, max * 0.78, base);
 const asset = (path: string) => staticFile(path.replace(/^\//, ""));
 const PlayerVisualContext = createContext(false);
 const teamColor = (p: PlayerData, s: VideoProps["settings"]) =>
@@ -240,7 +245,8 @@ function Tag({
     <div
       style={{
         fontSize: 20,
-        letterSpacing: 3,
+        fontFamily: display,
+        letterSpacing: 1.5,
         color,
         fontWeight: 700,
         textTransform: "uppercase",
@@ -265,9 +271,10 @@ function Title({
       <div
         style={{
           fontSize: 54,
+          fontFamily: heading,
           fontWeight: 900,
           marginTop: 12,
-          letterSpacing: -2,
+          letterSpacing: 1,
         }}
       >
         {children}
@@ -496,7 +503,8 @@ function SeriesGames({ props }: { props: Ctx }) {
             </div>
             <div
               style={{
-                fontSize: fit(winner, 250, 30),
+                fontFamily: display,
+                fontSize: fitDisplay(winner, 250, 30),
                 color,
                 fontWeight: 900,
                 marginTop: 8,
@@ -543,7 +551,8 @@ function Intro(props: Ctx) {
         </Tag>
         <div
           style={{
-            fontSize: fit(s.headline, 1190, 67),
+            fontFamily: heading,
+            fontSize: fitDisplay(s.headline, 1190, 67),
             fontWeight: 900,
             lineHeight: 1.3,
             marginTop: 14,
@@ -663,7 +672,8 @@ function Intro(props: Ctx) {
                   </Tag>
                   <div
                     style={{
-                      fontSize: fit(m[side], 450, 44),
+                      fontFamily: display,
+                      fontSize: fitDisplay(m[side], 450, 44),
                       fontWeight: 900,
                       margin: "10px 0 14px",
                       lineHeight: 1.2,
@@ -1215,7 +1225,14 @@ function RadarChart({
               x={x - 12.5}
               y={y - 62}
             />
-            <text x={x} y={y - 8} fill={p.dim} fontSize="21" fontWeight="700">
+            <text
+              x={x}
+              y={y - 8}
+              fill={p.dim}
+              fontFamily={font}
+              fontSize="21"
+              fontWeight="700"
+            >
               {label}
             </text>
             <text
@@ -1321,7 +1338,8 @@ function TeamResources(props: Ctx) {
                 <div style={{ minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize: fit(m[side], 600, 36),
+                      fontFamily: display,
+                      fontSize: fitDisplay(m[side], 600, 36),
                       lineHeight: 1.15,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -1385,6 +1403,7 @@ function TeamResources(props: Ctx) {
                 style={{
                   textAlign: "center",
                   color: p.ink,
+                  fontFamily: font,
                   fontWeight: 700,
                   fontSize: 26,
                   display: "flex",
@@ -1500,7 +1519,7 @@ function RadarScene(props: Ctx) {
                   : "POSITION " + String(comparison.position).padStart(2, "0")
               : "DAMAGE DUEL"}
         </Tag>
-        <span style={{ fontSize: 24, color: p.ink }}>
+        <span style={{ fontSize: 26, fontWeight: 700, color: p.ink }}>
           {comparison.label}
           {comparison.position ? "对位" : ""}
         </span>
@@ -1539,6 +1558,8 @@ function RadarScene(props: Ctx) {
                       : p.ink
                   : p.line),
               color: mode === i ? p.ink : p.dim,
+              fontFamily: display,
+              fontWeight: 700,
               fontSize: 20,
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -1575,7 +1596,8 @@ function RadarScene(props: Ctx) {
             <div
               style={{
                 color,
-                fontSize: fit(m[player.side], 280, 20),
+                fontFamily: display,
+                fontSize: fitDisplay(m[player.side], 280, 20),
                 fontWeight: 700,
                 lineHeight: 1.4,
                 overflowWrap: "anywhere",
@@ -1684,10 +1706,10 @@ function RadarScene(props: Ctx) {
               <div
                 data-player-kda
                 style={{
-                  fontFamily: mono,
+                  fontFamily: display,
                   fontWeight: 700,
                   fontVariantNumeric: "tabular-nums",
-                  fontSize: fit(kda, 300, 42),
+                  fontSize: fitDisplay(kda, 300, 42),
                   lineHeight: "50px",
                   whiteSpace: "nowrap",
                   marginTop: 12,
@@ -1909,7 +1931,8 @@ function Damage(props: Ctx) {
                 >
                   <span
                     style={{
-                      fontSize: 26,
+                      fontFamily: display,
+                      fontSize: fitDisplay(pl.name, 400, 26),
                       fontWeight: 700,
                       maxWidth: 400,
                       overflow: "hidden",
@@ -1994,7 +2017,8 @@ function Outro(props: Ctx) {
         <Tag color={color}>{m.series ? "系列赛战报" : "WINNER / 获胜战队"}</Tag>
         <div
           style={{
-            fontSize: fit(
+            fontFamily: display,
+            fontSize: fitDisplay(
               m.series ? m.radiant + " vs " + m.dire : f.winner,
               1000,
               101,
@@ -2096,6 +2120,10 @@ export function MatchFilm(props: VideoProps) {
     Promise.all([
       document.fonts.load("700 30px Orbitron"),
       document.fonts.load("900 80px Orbitron"),
+      document.fonts.load(
+        '400 54px "ZCOOL QingKe HuangYou"',
+        "资源对比赛后雷达",
+      ),
     ])
       .then(() => continueRender(fontHandle))
       .catch(cancelRender);
@@ -2123,6 +2151,15 @@ export function MatchFilm(props: VideoProps) {
         data-match-film
         style={{ fontFamily: font, color: p.ink, overflow: "hidden" }}
       >
+        <style>{`
+          @font-face {
+            font-family: "ZCOOL QingKe HuangYou";
+            src: url("${asset("assets/fonts/zcool-qingke-huangyou.woff2")}") format("woff2");
+            font-style: normal;
+            font-weight: 100 900;
+            font-display: block;
+          }
+        `}</style>
         <Background {...props} />
         {props.bgmTrack && s.bgm && (
           <Audio
@@ -2165,7 +2202,14 @@ export function MatchFilm(props: VideoProps) {
                 transform: "skewX(-15deg)",
               }}
             />
-            <span style={{ fontWeight: 900, fontSize: 23, letterSpacing: 2 }}>
+            <span
+              style={{
+                fontFamily: display,
+                fontWeight: 900,
+                fontSize: 25,
+                letterSpacing: 2,
+              }}
+            >
               {s.brand}
             </span>
             <span
