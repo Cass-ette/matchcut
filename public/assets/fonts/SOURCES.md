@@ -17,3 +17,13 @@ Large Chinese headings use ZCOOL QingKe HuangYou (站酷庆科黄油体), Regula
 Orbitron is used for titles, team/player identities and short English labels.
 Chinese display lettering is limited to large headings; small Chinese labels,
 subtitles and longer explanatory text retain a readable body font.
+
+The independent design study uses Barlow Condensed SemiBold for scores and
+numerical data. Player names retain Orbitron.
+
+- Upstream: https://github.com/google/fonts/tree/main/ofl/barlowcondensed
+- Original file: `BarlowCondensed-SemiBold.ttf`
+- Retrieved: 2026-10-09
+- Copyright: 2017 The Barlow Project Authors
+- License: SIL Open Font License 1.1; see `OFL-Barlow-Condensed.txt`.
+- Converted to WOFF2 with fontTools without subsetting.

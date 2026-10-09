@@ -12,6 +12,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "tsx --test tests/*.test.ts",
     "studio": "remotion studio src/video/index.tsx",
+    "design:study": "tsx scripts/design-study.ts",
+    "design:check": "tsx scripts/design-study-check.ts",
     "smoke": "tsx scripts/smoke.ts",
     "fixtures": "tsx scripts/fixture.ts",
     "format": "prettier --write src server scripts tests vite.config.ts tsconfig.json package.json README.md",
