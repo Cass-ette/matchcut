@@ -10,8 +10,7 @@ import path from "node:path";
 import { resolveBgm } from "./audio-source";
 import {
   FPS,
-  VIDEO_WIDTH,
-  VIDEO_HEIGHT,
+  exportResolutions,
   assertComparisons,
   assignedPositions,
   comparisons,
@@ -100,8 +99,9 @@ export async function runRender(
     const { segments, captions } = props;
     job.props = props;
     assertComparisons(match, settings);
-    job.width = settings.resolution === "720" ? 1280 : VIDEO_WIDTH;
-    job.height = settings.resolution === "720" ? 720 : VIDEO_HEIGHT;
+    const output = exportResolutions[settings.resolution];
+    job.width = output.width;
+    job.height = output.height;
     job.message = "准备视频模板";
     job.progress = 15;
     await update();
@@ -132,7 +132,7 @@ export async function runRender(
       pixelFormat: "yuv420p",
       muted: !bgmTrack,
       ...(bgmTrack ? { audioCodec: "aac" as const, audioBitrate: "192k" } : {}),
-      scale: settings.resolution === "720" ? 2 / 3 : 1,
+      scale: output.scale,
       timeoutInMilliseconds: 120000,
       onProgress: ({ progress }) => {
         job.progress = 20 + Math.floor(progress * 72);
@@ -153,7 +153,7 @@ export async function runRender(
       frame: Math.min(80, segments[0].frames - 20),
       imageFormat: "png",
       browserExecutable,
-      scale: settings.resolution === "720" ? 2 / 3 : 1,
+      scale: output.scale,
     });
     await writeFile(path.join(folder, "captions.srt"), srt(captions));
     await writeFile(

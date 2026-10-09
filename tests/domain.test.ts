@@ -18,6 +18,7 @@ import {
   refreshSettings,
   comparisonScript,
   makeCaptions,
+  exportResolutions,
 } from "../src/domain";
 const fixture = JSON.parse(
   readFileSync("data/fixtures/9035078952.json", "utf8"),
@@ -25,6 +26,27 @@ const fixture = JSON.parse(
 const heroes = JSON.parse(readFileSync("data/fixtures/heroes.json", "utf8"));
 const raw = () => structuredClone(fixture.raw);
 const match = () => normalizeMatch(raw(), heroes, fixture.fetchedAt);
+
+test("all export sizes round-trip through projects and retain the same layout and timing", () => {
+  const m = match();
+  const base = defaultSettings(m);
+  const frames = totalFrames(previewProps(m, base).segments);
+  for (const resolution of ["720", "1080", "1440", "2160"] as const) {
+    const settings = settingsSchema.parse(
+      JSON.parse(JSON.stringify({ ...base, resolution })),
+    );
+    assert.equal(settings.resolution, resolution);
+    const output = exportResolutions[resolution];
+    assert.equal(output.width / output.height, 16 / 9);
+    assert.equal(Math.round(1920 * output.scale), output.width);
+    assert.equal(Math.round(1080 * output.scale), output.height);
+    assert.equal(totalFrames(previewProps(m, settings).segments), frames);
+  }
+  assert.equal(
+    settingsSchema.safeParse({ ...base, resolution: "4320" }).success,
+    false,
+  );
+});
 
 test("real provider snapshot: correct winner, opposing focus players, economy times and values", () => {
   const m = match(),
@@ -173,14 +195,7 @@ test("support axes reflect support statistics and do not invent missing values",
   const axes = radar(m, c.pair!, c.position);
   assert.deepEqual(
     axes.map((a) => a.label),
-    [
-    "助攻",
-    "参战率",
-      "观察守卫",
-      "岗哨守卫",
-      "眩晕时长",
-      "英雄治疗",
-    ],
+    ["助攻", "参战率", "观察守卫", "岗哨守卫", "眩晕时长", "英雄治疗"],
   );
   assert.equal(axes[2].a, 16);
   assert.equal(axes[3].b, 34);

@@ -26,6 +26,7 @@ import {
 } from "./media";
 import "./admin.css";
 import { LogoPicker } from "./LogoPicker";
+import { PlayerPlaceholder } from "./PlayerPlaceholder";
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -37,10 +38,12 @@ function Thumbnail({
   src,
   name,
   logo = false,
+  player = false,
 }: {
   src?: string;
   name: string;
   logo?: boolean;
+  player?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
@@ -55,6 +58,8 @@ function Thumbnail({
         objectPosition: logo ? "center" : "center 15%",
       }}
     />
+  ) : player ? (
+    <PlayerPlaceholder name={name} compact />
   ) : (
     <span className="media-initials">{teamInitials(name)}</span>
   );
@@ -96,6 +101,8 @@ function ImageSlot({
           <img src={item.images[slot]} alt={label} />
         ) : slot === "logo" ? (
           <span className="media-initials">{teamInitials(item.name)}</span>
+        ) : item.kind === "player" ? (
+          <PlayerPlaceholder name={item.name} compact={slot === "portrait"} />
         ) : (
           <ImagePlus size={42} strokeWidth={1} />
         )}
@@ -477,6 +484,7 @@ export function AssetAdmin() {
                         }
                         name={item.name}
                         logo={kind === "team"}
+                        player={kind === "player"}
                       />
                     </div>
                     <strong title={item.name}>{item.name}</strong>

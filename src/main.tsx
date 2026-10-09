@@ -40,6 +40,7 @@ import {
   FPS,
   VIDEO_WIDTH,
   VIDEO_HEIGHT,
+  exportResolutions,
   ReportData,
   sceneNames,
   sceneSlots,
@@ -1256,8 +1257,8 @@ function App() {
               <h2>成片预览</h2>
             </div>
             <span className="preview-meta">
-              16:9 <span>·</span>{" "}
-              {settings.resolution === "1080" ? "1920 × 1080" : "1280 × 720"}
+              16:9 <span>·</span> {exportResolutions[settings.resolution].width}{" "}
+              × {exportResolutions[settings.resolution].height}
             </span>
           </div>
           <div className="preview-stage">
@@ -1821,7 +1822,7 @@ function App() {
                         (p) => !p.playerImage && !p.playerArtwork,
                       ).length
                     }{" "}
-                    位选手待补照片，当前显示姓名缩写。
+                    位选手待补照片，当前显示剪影占位。
                   </div>
                 )}
               <a
@@ -1863,6 +1864,8 @@ function App() {
               >
                 <option value="1080">1080p · 正式发布</option>
                 <option value="720">720p · 快速试片</option>
+                <option value="1440">{exportResolutions["1440"].label}</option>
+                <option value="2160">{exportResolutions["2160"].label}</option>
               </select>
             </>
           ) : (

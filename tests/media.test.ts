@@ -51,6 +51,59 @@ async function fixtures() {
   return games;
 }
 
+test("independent player catalog includes missing photos and survives transfers without nickname matching", async (t) => {
+  const { root, library } = await setup(t);
+  await writeFile(
+    path.join(root, "data/fixtures/lol/players.json"),
+    JSON.stringify({
+      players: [
+        {
+          playerId: "oe:person:one",
+          name: "SameName",
+          aliases: ["FormerName"],
+        },
+        { playerId: "oe:person:two", name: "SameName", aliases: [] },
+      ],
+    }),
+  );
+  await writeFile(
+    path.join(root, "data/fixtures/player-photos.json"),
+    JSON.stringify([
+      {
+        game: "lol",
+        playerId: "oe:person:one",
+        name: "SameName",
+        artwork: "/assets/players/one.png",
+        source: {
+          name: "SameName",
+          provider: "LPL official",
+          pageUrl: "https://lpl.qq.com/",
+          imageUrl: "https://lpl.qq.com/one.png",
+        },
+      },
+    ]),
+  );
+  const summaries = ["Previous Team", "New Team"].map((team) => ({
+    radiant: team,
+    dire: "Opponent",
+    players: [{ playerId: "oe:person:one", name: "NewName", team }],
+  }));
+  const players = (await library.list("lol", summaries)).filter(
+    (item) => item.kind === "player",
+  );
+  assert.equal(players.length, 2);
+  const one = players.find(
+    (p) => p.id === playerMediaId("lol", { playerId: "oe:person:one" }),
+  )!;
+  assert.equal(one.images.artwork, "/assets/players/one.png");
+  assert.ok(one.aliases.includes("FormerName"));
+  assert.equal(players.find((p) => p.id !== one.id)!.images.artwork, undefined);
+  assert.equal(
+    (await library.list("cs2")).filter((p) => p.kind === "player").length,
+    0,
+  );
+});
+
 test("team logo review distinguishes ambiguous and missing images and clears after an explicit choice", async (t) => {
   const { root, library, png } = await setup(t);
   await writeFile(

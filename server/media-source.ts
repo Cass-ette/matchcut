@@ -80,6 +80,11 @@ type PlayerSeed = {
   artwork: string;
   source: NonNullable<MediaItem["photoSource"]>;
 };
+type PlayerProfile = {
+  playerId: string;
+  name: string;
+  aliases: string[];
+};
 export type TeamSummary = {
   radiant: string;
   dire: string;
@@ -175,6 +180,21 @@ export class MediaLibrary {
       throw e;
     }
   }
+  private async playerProfiles(game: Game): Promise<PlayerProfile[]> {
+    if (game !== "lol") return [];
+    try {
+      const catalog = JSON.parse(
+        await readFile(
+          path.join(this.root, "data/fixtures/lol/players.json"),
+          "utf8",
+        ),
+      );
+      return catalog.players;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw e;
+    }
+  }
   private async teams(
     game: Game,
     registry: Registry,
@@ -260,6 +280,19 @@ export class MediaLibrary {
     const registry = await this.read();
     const heroes: MediaItem[] = [];
     const players = new Map<string, MediaItem>();
+    for (const person of await this.playerProfiles(game)) {
+      const id = playerMediaId(game, person)!;
+      players.set(id, {
+        id,
+        game,
+        kind: "player",
+        name: person.name,
+        aliases: [...new Set([person.playerId, ...person.aliases])],
+        images: {},
+        defaults: {},
+        overrides: [],
+      });
+    }
     for (const seed of await this.playerSeeds()) {
       if (seed.game !== game) continue;
       const id = playerMediaId(game, seed)!;
@@ -268,7 +301,9 @@ export class MediaLibrary {
         game,
         kind: "player",
         name: seed.name,
-        aliases: [seed.playerId],
+        aliases: [
+          ...new Set([...(players.get(id)?.aliases || []), seed.playerId]),
+        ],
         images: { artwork: seed.artwork },
         defaults: { artwork: seed.artwork },
         overrides: [],

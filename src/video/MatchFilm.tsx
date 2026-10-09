@@ -15,6 +15,8 @@ import {
 import "@fontsource/orbitron/latin-700.css";
 import "@fontsource/orbitron/latin-900.css";
 import { teamInitials } from "../media";
+import { StatIcon, StatLabel } from "../StatIcon";
+import { PlayerPlaceholder } from "../PlayerPlaceholder";
 import {
   MatchData,
   PlayerData,
@@ -128,6 +130,10 @@ function Portrait({
         ))}
       </div>
     );
+  if (!image && photo)
+    return (
+      <PlayerPlaceholder name={p.name} compact style={{ width, height }} />
+    );
   if (!image)
     return (
       <div
@@ -193,6 +199,8 @@ function HeroArt({ p, style }: { p: PlayerData; style?: React.CSSProperties }) {
             maskImage,
           }}
         />
+      ) : photo ? (
+        <PlayerPlaceholder name={p.name} style={{ maskImage }} />
       ) : (
         <div
           data-hero-art
@@ -812,7 +820,7 @@ function Economy(props: Ctx) {
   return (
     <AbsoluteFill>
       <Title en="02 / GOLD ADVANTAGE" props={props}>
-        经济走势
+        <StatLabel label="经济走势" size={46} color="#e5ba63" />
       </Title>
       <div
         style={{
@@ -956,7 +964,15 @@ function Economy(props: Ctx) {
           paddingLeft: 46,
         }}
       >
-        <Tag color={p.dim}>{m.radiant} · 最大领先</Tag>
+        <Tag color={p.dim}>
+          <StatIcon
+            label="总经济"
+            size={22}
+            color={s.accent}
+            style={{ verticalAlign: "middle", marginRight: 10 }}
+          />
+          {m.radiant} · 最大领先
+        </Tag>
         <div
           style={{
             ...digits,
@@ -967,7 +983,15 @@ function Economy(props: Ctx) {
         >
           {compact(Math.max(0, f.max.value))}
         </div>
-        <Tag color={p.dim}>{m.dire} · 最大领先</Tag>
+        <Tag color={p.dim}>
+          <StatIcon
+            label="总经济"
+            size={22}
+            color={s.secondary}
+            style={{ verticalAlign: "middle", marginRight: 10 }}
+          />
+          {m.dire} · 最大领先
+        </Tag>
         <div
           style={{
             ...digits,
@@ -978,7 +1002,10 @@ function Economy(props: Ctx) {
         >
           {compact(Math.max(0, -f.min.value))}
         </div>
-        <Tag color={p.dim}>{f.final.minute.toFixed(0)} 分钟 · 经济差</Tag>
+        <Tag color={p.dim}>
+          {f.final.minute.toFixed(0)} 分钟 ·{" "}
+          <StatLabel label="经济差" color="#e5ba63" />
+        </Tag>
         <div
           style={{
             ...digits,
@@ -1181,6 +1208,13 @@ function RadarChart({
         const label = axis.label;
         return (
           <g key={axis.label} textAnchor="middle">
+            <StatIcon
+              label={label}
+              size={25}
+              color={p.dim}
+              x={x - 12.5}
+              y={y - 62}
+            />
             <text x={x} y={y - 8} fill={p.dim} fontSize="21" fontWeight="700">
               {label}
             </text>
@@ -1290,8 +1324,26 @@ function TeamResources(props: Ctx) {
                   color: p.ink,
                   fontWeight: 700,
                   fontSize: 26,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 13,
                 }}
               >
+                <StatIcon
+                  label={item.label}
+                  size={36}
+                  color={
+                    item.label === "总经济"
+                      ? "#e5ba63"
+                      : item.label === "小龙"
+                        ? "#72d4bf"
+                        : item.label === "大龙"
+                          ? "#bc9bea"
+                          : "#93bddd"
+                  }
+                  style={{ flexShrink: 0 }}
+                />
                 {item.label}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 30 }}>
@@ -1557,7 +1609,15 @@ function RadarScene(props: Ctx) {
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <Tag color={p.dim}>K / D / A</Tag>
+              <Tag color={p.dim}>
+                <span
+                  style={{ display: "flex", alignItems: "center", gap: 10 }}
+                >
+                  <StatIcon label="击杀" size={21} />K /{" "}
+                  <StatIcon label="死亡" size={21} />D /{" "}
+                  <StatIcon label="助攻" size={21} />A
+                </span>
+              </Tag>
               <div
                 data-player-kda
                 style={{
@@ -1904,7 +1964,9 @@ function Outro(props: Ctx) {
             ],
           ].map(([label, value]) => (
             <div key={label}>
-              <Tag color={p.dim}>{label}</Tag>
+              <Tag color={p.dim}>
+                <StatLabel label={label} color={color} />
+              </Tag>
               <div style={{ ...digits, fontSize: 49, marginTop: 18 }}>
                 {value}
               </div>

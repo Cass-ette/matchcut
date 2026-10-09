@@ -3,6 +3,17 @@ import { z } from "zod";
 export const FPS = 30;
 export const VIDEO_WIDTH = 1920;
 export const VIDEO_HEIGHT = 1080;
+export const exportResolutions = {
+  "720": { width: 1280, height: 720, scale: 2 / 3, label: "720p · 快速试片" },
+  "1080": { width: 1920, height: 1080, scale: 1, label: "1080p · 正式发布" },
+  "1440": {
+    width: 2560,
+    height: 1440,
+    scale: 4 / 3,
+    label: "2K · 2560 × 1440",
+  },
+  "2160": { width: 3840, height: 2160, scale: 2, label: "4K · 3840 × 2160" },
+} as const;
 export const DEFAULT_MATCH = "9035078952";
 export const DEFAULT_LOL_MATCH = "lol-LOLTMNT02_76144";
 export const DEFAULT_CS_MATCH = "cs2-monte-og-anubis";
@@ -139,7 +150,7 @@ export const settingsSchema = z.object({
   pace: z.enum(["snappy", "standard", "relaxed"]).default("standard"),
   captions: z.boolean().default(true),
   scripts: z.array(z.string().trim().max(240)).length(5),
-  resolution: z.enum(["1080", "720"]).default("1080"),
+  resolution: z.enum(["1080", "720", "1440", "2160"]).default("1080"),
   radarMode: z.enum(["positions", "damage", "ranked"]).default("positions"),
   radarPosition: z.enum(["all", "1", "2", "3", "4", "5"]).default("all"),
   positionOverrides: positionOverridesSchema.optional(),
