@@ -15,7 +15,7 @@ export type LogoCatalogData = {
 };
 export type MediaItem = {
   id: string;
-  kind: "team" | "hero";
+  kind: "team" | "hero" | "player";
   game: Game;
   name: string;
   aliases: string[];
@@ -25,7 +25,16 @@ export type MediaItem = {
   overrides: MediaSlot[];
   logoSource?: LogoSource;
   automaticLogo?: CatalogLogo;
+  logoReview?: "ambiguous" | "missing";
+  photoSource?: {
+    name: string;
+    provider: string;
+    pageUrl: string;
+    imageUrl: string;
+  };
 };
+export const logoReviewText = (reason: MediaItem["logoReview"]) =>
+  reason === "ambiguous" ? "同名待确认" : "缺少队标";
 export function exactLogo(
   logos: CatalogLogo[],
   game: Game,

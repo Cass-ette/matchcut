@@ -1615,3 +1615,18 @@ select {
   display: block;
   color: #f6c453;
 }
+.team-logo-review {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: #de9a9e;
+  font-size: 11px;
+  text-decoration: none;
+}
+.team-logo-review > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f06e76;
+}

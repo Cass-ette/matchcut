@@ -1,5 +1,24 @@
 # 验证记录
 
+## 头像光晕裁切修复（2026-10-09）
+
+- 图片渐隐与外层光晕分离；照片遮罩跟随实际图片高度，方形头像底部也能自然淡出。
+- `npm run build` 通过。Chromium 预览与 Remotion 1080p 静帧检查覆盖 CS 定妆照、LoL 透明头像与带背景头像、LoL / Dota 英雄图，以及缺图姓名占位；高燃与收敛切换正常，文字未与图片重叠。
+- 修复前后截图与六种画面的导出静帧保存在 `output/verification/glow/`。验证使用临时页面数据，没有修改用户照片绑定或偏好。
+
+## CS 与选手照片（2026-10-09）
+
+- `npm test`：49 项通过，覆盖 CS K/D/A 排序、换边与加时、非法/片段 Demo、流式导入与去重；选手照片按 ID 隔离、LoL 换英雄/换边/替补汇总；队标缺失与同名待确认；照片来源解析与网络地址、体积限制。
+- `npm run build`：TypeScript 与生产构建通过。
+- 使用 `@akiver/cs-demo-analyzer` 1.11.0 的原生解析器导入完整真实 Demo，核对 OG Esports 7:13 Monte、Anubis、20 回合、十名选手和完整 SteamID。实际源文件 SHA256：`743c3a4834433983d947a31323487a6f4aee13ce9279bc07377f90571f3697bc`。
+- `MATCHCUT_CS_DEMO=… npm run smoke -- --cs --render`：真实浏览器上传 Demo、K/D/A 与手动位置切换、偏好重载、项目往返、无效文件反馈、桌面/窄屏以及完整视频导出通过。成片只有地图战报、选手雷达、击杀排行、赛果回顾四幕；十名选手使用真实本地图像。
+- 成片任务：`output/2026-10-09T09-08-02-243Z-ceb23d/`。ffprobe 确认 H.264、1280×720、30 fps、无音轨。源快照、项目、字幕、封面随片保存；详细信息在 `output/verification/cs/last-job.json` 与 `metadata.json`。
+- `npm run smoke -- --media --render`：独立临时素材库验证 Dota/LoL/CS 三个游戏的照片上传、预览、渲染、设置重载和项目往返；LoL/Dota 英雄/照片切换；新队标红点、待确认筛选、绑定后消失。实际 ProSettings k1to 资料页取图、预览、绑定与来源持久化通过。没有向用户素材库写入测试照片。
+- 已检查 `output/verification/cs/scene-*.png` 和 `output/verification/media/` 的雷达、排行、照片、红点截图。内置 CS 十人、T1 五人照片及十张地图徽标均已下载到本地，来源清单随素材保留。
+- 当前网络访问 HLTV 资料页返回 403，应用明确反馈；ProSettings 照片获取已实际验证。不保证第三方站点持续可访问。
+
+## 先前 Dota 验证
+
 验证日期：2026-10-09（Asia/Shanghai），横屏对位 + 黑金特效版。
 
 - `npm run build`：TypeScript 与生产构建通过。字体从本地依赖打包。

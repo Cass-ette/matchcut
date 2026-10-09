@@ -79,7 +79,7 @@ test("LoL ADC keeps damage metrics; support uses vision, not Dota role-four axes
   assert.equal(adc[2].a, 19643 / (2524 / 60));
   assert.equal(
     adc[3].a,
-    m.players.find((p) => p.name === "Gumayusi")!.lastHits / (2524 / 60),
+    m.players.find((p) => p.name === "Gumayusi")!.lastHits! / (2524 / 60),
   );
   assert.equal(support[2].a, 135);
   assert.equal(support[2].b, 143);

@@ -121,6 +121,8 @@ test("directory refresh is cached, ignores unsafe paths and downloads only index
         tree: [
           { path: "dota-2", sha: "1".repeat(40), type: "tree" },
           { path: "league-of-legends", sha: "2".repeat(40), type: "tree" },
+          { path: "cs", sha: "3".repeat(40), type: "tree" },
+          { path: "csgo", sha: "4".repeat(40), type: "tree" },
         ],
       });
     return Response.json({
@@ -133,14 +135,15 @@ test("directory refresh is cached, ignores unsafe paths and downloads only index
   };
   const catalog = new LogoCatalog(root, fetcher);
   const data = await catalog.list(true);
-  assert.equal(data.logos.length, 2);
+  assert.equal(data.logos.length, 4);
+  assert.equal(data.logos.filter((logo) => logo.game === "cs2").length, 2);
   const [a, b] = await Promise.all([catalog.image(sha), catalog.image(sha)]);
   assert.deepEqual(a, b);
   assert.equal(imageRequests, 1);
   const restarted = new LogoCatalog(root, async () => {
     throw new Error("offline");
   });
-  assert.equal((await restarted.list()).logos.length, 2);
+  assert.equal((await restarted.list()).logos.length, 4);
   assert.deepEqual(await restarted.image(sha), a);
   assert.ok(
     (await readFile(path.join(root, "data/cache/logo-catalog/index.json")))

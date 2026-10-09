@@ -4,10 +4,15 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
-import { MediaLibrary } from "../server/media-source";
+import { MediaLibrary, playerMediaId } from "../server/media-source";
 import { normalizeLol } from "../src/lol";
 import { summarizeLolSeries } from "../src/series";
-import { defaultSettings, previewProps } from "../src/domain";
+import {
+  defaultSettings,
+  previewProps,
+  normalizeMatch,
+  settingsSchema,
+} from "../src/domain";
 
 async function setup(t: TestContext) {
   const root = await mkdtemp(path.join(os.tmpdir(), "matchcut-media-"));
@@ -45,6 +50,156 @@ async function fixtures() {
   }
   return games;
 }
+
+test("team logo review distinguishes ambiguous and missing images and clears after an explicit choice", async (t) => {
+  const { root, library, png } = await setup(t);
+  await writeFile(
+    path.join(root, "data/fixtures/logo-catalog.json"),
+    JSON.stringify({
+      fetchedAt: "2026-10-09",
+      logos: [
+        {
+          game: "lol",
+          name: "same club",
+          path: "league-of-legends/same-club/one.png",
+          sha: "a".repeat(40),
+        },
+        {
+          game: "lol",
+          name: "same club",
+          path: "league-of-legends/same-club/two.png",
+          sha: "b".repeat(40),
+        },
+      ],
+    }),
+  );
+  const summaries = [{ radiant: "Same Club", dire: "New Club" }];
+  const items = await library.list("lol", summaries);
+  const ambiguous = items.find((t) => t.name === "Same Club")!;
+  assert.equal(ambiguous.logoReview, "ambiguous");
+  assert.equal(items.find((t) => t.name === "New Club")!.logoReview, "missing");
+  assert.equal(items.find((t) => t.name === "T1")!.logoReview, undefined);
+  await library.setImage("lol", ambiguous.id, "logo", png, summaries);
+  assert.equal(
+    (await library.list("lol", summaries)).find((t) => t.id === ambiguous.id)!
+      .logoReview,
+    undefined,
+  );
+  await library.setImage("lol", ambiguous.id, "logo", null, summaries);
+  assert.equal(
+    (await library.list("lol", summaries)).find((t) => t.id === ambiguous.id)!
+      .logoReview,
+    "ambiguous",
+  );
+});
+
+test("player photos follow stable identities across heroes, teams and series; never leak to another player or game", async (t) => {
+  const { root, library, png } = await setup(t);
+  const games = await fixtures();
+  const summaries = games.map((g) => ({
+    radiant: g.radiant,
+    dire: g.dire,
+    players: g.players.map((p) => ({
+      playerId: p.playerId,
+      name: p.name,
+      team: g[p.side],
+    })),
+  }));
+  const players = (await library.list("lol", summaries)).filter(
+    (i) => i.kind === "player",
+  );
+  assert.equal(players.length, 10);
+  const faker = players.find((p) => p.name === "Faker")!;
+  const photo = await library.setImage(
+    "lol",
+    faker.id,
+    "artwork",
+    png,
+    summaries,
+  );
+  const heroImages = games.map(
+    (g) => g.players.find((p) => p.name === "Faker")!.image,
+  );
+  for (const g of games) await library.apply(g);
+  for (const [i, g] of games.entries()) {
+    const p = g.players.find((p) => p.name === "Faker")!;
+    assert.equal(p.playerArtwork, photo.src);
+    assert.equal(p.image, heroImages[i]);
+    assert.ok(
+      g.players
+        .filter((p) => p.name !== "Faker")
+        .every((p) => !p.playerArtwork),
+    );
+  }
+  const series = summarizeLolSeries(games);
+  assert.equal(
+    series.players.find((p) => p.name === "Faker")!.playerArtwork,
+    photo.src,
+  );
+  assert.equal(
+    series.series!.players.find((p) => p.name === "Faker")!.playerArtwork,
+    photo.src,
+  );
+  const substitute = games[1].players.find((p) => p.name === "Faker")!;
+  substitute.playerId = "different-person";
+  substitute.name = "Substitute";
+  await library.apply(games[1]);
+  assert.equal(substitute.playerArtwork, undefined);
+  assert.equal(
+    summarizeLolSeries(games).players.find((p) =>
+      p.name.includes("Substitute"),
+    )!.playerArtwork,
+    undefined,
+  );
+  const sameName = structuredClone(games[0]);
+  sameName.players.find((p) => p.name === "Faker")!.playerId =
+    "unrelated-same-name";
+  await library.apply(sameName);
+  assert.equal(
+    sameName.players.find((p) => p.name === "Faker")!.playerArtwork,
+    undefined,
+  );
+  sameName.game = "dota2";
+  sameName.players[0].playerId = games[0].players.find(
+    (p) => p.name === "Faker",
+  )!.playerId;
+  await library.apply(sameName);
+  assert.equal(sameName.players[0].playerArtwork, undefined);
+  const saved = settingsSchema.parse({
+    ...defaultSettings(games[0]),
+    playerVisual: "photo",
+  });
+  assert.equal(
+    settingsSchema.parse(JSON.parse(JSON.stringify(saved))).playerVisual,
+    "photo",
+  );
+  const restarted = new MediaLibrary(root);
+  assert.equal(
+    (await restarted.list("lol")).find((i) => i.id === faker.id)!.images
+      .artwork,
+    photo.src,
+  );
+  await restarted.setImage("lol", faker.id, "artwork", null);
+  await restarted.apply(games[0]);
+  assert.equal(
+    games[0].players.find((p) => p.name === "Faker")!.playerArtwork,
+    undefined,
+  );
+  assert.ok((await readFile(path.join(root, "public", photo.src!))).length);
+
+  const { raw, fetchedAt } = JSON.parse(
+    await readFile("data/fixtures/9035078952.json", "utf8"),
+  );
+  const heroes = JSON.parse(
+    await readFile("data/fixtures/heroes.json", "utf8"),
+  );
+  const dota = normalizeMatch(raw, heroes, fetchedAt);
+  const id = playerMediaId("dota2", dota.players[0])!;
+  await library.setImage("dota2", id, "portrait", png, [dota]);
+  await library.apply(dota);
+  assert.match(dota.players[0].playerImage!, /^\/assets\/library\//);
+  assert.match(dota.players[0].image, /^\/assets\/heroes\//);
+});
 
 test("uploads persist, reset restores defaults and leaves historical image files intact", async (t) => {
   const { root, library, png } = await setup(t);

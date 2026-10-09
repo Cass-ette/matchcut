@@ -204,6 +204,7 @@ export function LogoPicker({
           >
             <option value="lol">英雄联盟</option>
             <option value="dota2">Dota 2</option>
+            <option value="cs2">CS</option>
             <option value="all">全部游戏</option>
           </select>
           <button
@@ -252,7 +253,13 @@ export function LogoPicker({
                         <CatalogImage logo={logo} />
                       </div>
                       <strong title={logo.name}>{logo.name}</strong>
-                      <span>{logo.game === "lol" ? "英雄联盟" : "Dota 2"}</span>
+                      <span>
+                        {logo.game === "cs2"
+                          ? "CS"
+                          : logo.game === "lol"
+                            ? "英雄联盟"
+                            : "Dota 2"}
+                      </span>
                     </button>
                   ))}
                 </div>

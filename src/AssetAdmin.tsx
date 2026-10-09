@@ -11,6 +11,8 @@ import {
   Save,
   Search,
   Shield,
+  UserRound,
+  CircleAlert,
   Upload,
   X,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import type { Game } from "./domain";
 import {
   catalogLogoUrl,
   teamInitials,
+  logoReviewText,
   type MediaItem,
   type MediaSlot,
 } from "./media";
@@ -47,7 +50,10 @@ function Thumbnail({
       alt={name}
       loading="lazy"
       onError={() => setFailed(true)}
-      style={{ objectFit: logo ? "contain" : "cover" }}
+      style={{
+        objectFit: logo ? "contain" : "cover",
+        objectPosition: logo ? "center" : "center 15%",
+      }}
     />
   ) : (
     <span className="media-initials">{teamInitials(name)}</span>
@@ -66,9 +72,11 @@ function ImageSlot({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [background, setBackground] = useState("dark");
-  const label = { logo: "战队图标", portrait: "英雄头像", artwork: "英雄立绘" }[
-    slot
-  ];
+  const label = {
+    logo: "战队图标",
+    portrait: item.kind === "player" ? "选手头像" : "英雄头像",
+    artwork: item.kind === "player" ? "选手定妆照" : "英雄立绘",
+  }[slot];
   return (
     <section className="media-slot">
       <div className="media-slot-heading">
@@ -146,15 +154,25 @@ function ImageSlot({
 
 export function AssetAdmin() {
   const initialGame: Game =
-    new URLSearchParams(location.search).get("game") === "lol"
-      ? "lol"
-      : "dota2";
+    new URLSearchParams(location.search).get("game") === "cs2"
+      ? "cs2"
+      : new URLSearchParams(location.search).get("game") === "lol"
+        ? "lol"
+        : "dota2";
   const [game, setGame] = useState<Game>(initialGame);
-  const [kind, setKind] = useState<"team" | "hero">("team");
+  const [kind, setKind] = useState<"team" | "hero" | "player">(
+    new URLSearchParams(location.search).get("kind") === "player"
+      ? "player"
+      : "team",
+  );
   const [items, setItems] = useState<MediaItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(
+    new URLSearchParams(location.search).get("filter") === "review"
+      ? "review"
+      : "all",
+  );
   const [limit, setLimit] = useState(60);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -165,6 +183,9 @@ export function AssetAdmin() {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [pickerTeam, setPickerTeam] = useState<MediaItem | null>(null);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoCandidate, setPhotoCandidate] =
+    useState<MediaItem["photoSource"]>();
   const selected = items.find(
     (item) => item.id === selectedId && item.kind === kind,
   );
@@ -177,11 +198,15 @@ export function AssetAdmin() {
             v.toLowerCase().includes(query.trim().toLowerCase()),
           ) &&
           (filter === "all" ||
-            (filter === "custom"
-              ? !!item.overrides.length
-              : kind === "team"
-                ? !item.images.logo
-                : !item.images.portrait || !item.images.artwork)),
+            (filter === "review"
+              ? Boolean(item.logoReview)
+              : filter === "custom"
+                ? !!item.overrides.length
+                : kind === "team"
+                  ? !item.images.logo
+                  : kind === "player"
+                    ? !item.images.portrait && !item.images.artwork
+                    : !item.images.portrait || !item.images.artwork)),
       ),
     [items, kind, query, filter],
   );
@@ -213,6 +238,14 @@ export function AssetAdmin() {
     setAliases(selected?.aliases.join("\n") || "");
   }, [selected]);
   useEffect(() => {
+    setPhotoCandidate(undefined);
+    setPhotoUrl(
+      selected?.kind === "player" && /^[a-z0-9-]+$/i.test(selected.name)
+        ? `https://prosettings.net/players/${selected.name.toLowerCase()}/`
+        : "",
+    );
+  }, [selected?.id]);
+  useEffect(() => {
     setSelectedId((id) =>
       items.some((item) => item.id === id && item.kind === kind)
         ? id
@@ -227,14 +260,14 @@ export function AssetAdmin() {
   }, [notice]);
   const refresh = async () =>
     setItems(await request<MediaItem[]>(`/api/media?game=${game}`));
-  async function act(action: () => Promise<void>) {
+  async function act(action: () => Promise<void>, notice = "已保存") {
     setBusy(true);
     setError("");
     setNotice("");
     try {
       await action();
       await refresh();
-      setNotice("已保存");
+      setNotice(notice);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -290,7 +323,7 @@ export function AssetAdmin() {
           <h1>素材管理</h1>
         </div>
         <div className="game-switch">
-          {(["dota2", "lol"] as const).map((g) => (
+          {(["dota2", "lol", "cs2"] as const).map((g) => (
             <button
               key={g}
               disabled={busy}
@@ -298,10 +331,11 @@ export function AssetAdmin() {
               aria-pressed={game === g}
               onClick={() => {
                 setQuery("");
+                setKind("team");
                 setGame(g);
               }}
             >
-              {g === "lol" ? "英雄联盟" : "Dota 2"}
+              {g === "cs2" ? "CS" : g === "lol" ? "英雄联盟" : "Dota 2"}
             </button>
           ))}
         </div>
@@ -309,7 +343,8 @@ export function AssetAdmin() {
       <div className="media-tabs" role="tablist" aria-label="素材类别">
         {[
           ["team", "战队图标"],
-          ["hero", "英雄图片"],
+          ...(game === "cs2" ? [] : [["hero", "英雄图片"]]),
+          ["player", "选手定妆照"],
         ].map(([value, title]) => (
           <button
             role="tab"
@@ -325,7 +360,11 @@ export function AssetAdmin() {
               );
             }}
           >
-            <Shield size={16} />
+            {value === "player" ? (
+              <UserRound size={16} />
+            ) : (
+              <Shield size={16} />
+            )}
             {title}
             <span>{items.filter((item) => item.kind === value).length}</span>
           </button>
@@ -352,7 +391,13 @@ export function AssetAdmin() {
               <Search size={16} />
               <input
                 aria-label="搜索素材"
-                placeholder={kind === "team" ? "搜索战队 / 别名" : "搜索英雄"}
+                placeholder={
+                  kind === "team"
+                    ? "搜索战队 / 别名"
+                    : kind === "player"
+                      ? "搜索选手"
+                      : "搜索英雄"
+                }
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -365,6 +410,7 @@ export function AssetAdmin() {
               <option value="all">全部</option>
               <option value="custom">已替换</option>
               <option value="missing">待补图</option>
+              {kind === "team" && <option value="review">待确认队标</option>}
             </select>
             {kind === "team" && (
               <button
@@ -388,7 +434,12 @@ export function AssetAdmin() {
           ) : (
             <>
               <div className="media-result-count">
-                {list.length} {kind === "team" ? "支战队" : "位英雄"}
+                {list.length}{" "}
+                {kind === "team"
+                  ? "支战队"
+                  : kind === "player"
+                    ? "位选手"
+                    : "位英雄"}
               </div>
               <div className="media-grid">
                 {list.slice(0, limit).map((item) => (
@@ -408,12 +459,21 @@ export function AssetAdmin() {
                           });
                     }}
                   >
+                    {item.logoReview && (
+                      <span
+                        className="logo-review-badge"
+                        title={logoReviewText(item.logoReview)}
+                        aria-label={logoReviewText(item.logoReview)}
+                      >
+                        <span />
+                      </span>
+                    )}
                     <div className={`media-thumb ${kind}`}>
                       <Thumbnail
                         src={
                           kind === "team"
                             ? item.images.logo
-                            : item.images.portrait
+                            : item.images.portrait || item.images.artwork
                         }
                         name={item.name}
                         logo={kind === "team"}
@@ -421,17 +481,20 @@ export function AssetAdmin() {
                     </div>
                     <strong title={item.name}>{item.name}</strong>
                     <span className={item.overrides.length ? "is-custom" : ""}>
-                      {item.overrides.length
-                        ? "自定义"
-                        : kind === "team" && item.automaticLogo
-                          ? "自动匹配"
-                          : (
-                                kind === "team"
-                                  ? item.images.logo
-                                  : item.images.portrait
-                              )
-                            ? "默认"
-                            : "待补图"}
+                      {item.logoReview
+                        ? logoReviewText(item.logoReview)
+                        : item.overrides.length
+                          ? "自定义"
+                          : kind === "team" && item.automaticLogo
+                            ? "自动匹配"
+                            : (
+                                  kind === "team"
+                                    ? item.images.logo
+                                    : item.images.portrait ||
+                                      item.images.artwork
+                                )
+                              ? "默认"
+                              : "待补图"}
                     </span>
                   </button>
                 ))}
@@ -455,8 +518,103 @@ export function AssetAdmin() {
             <>
               <div className="media-editor-title">
                 <h2>{selected.name}</h2>
-                <span>{selected.kind === "team" ? "TEAM" : "HERO"}</span>
+                <span>
+                  {selected.kind === "team"
+                    ? "TEAM"
+                    : selected.kind === "player"
+                      ? "PLAYER"
+                      : "HERO"}
+                </span>
               </div>
+              {selected.kind === "player" && (
+                <section className="photo-source-picker">
+                  <label className="field-label" htmlFor="photo-source-url">
+                    从资料页获取照片
+                  </label>
+                  <input
+                    id="photo-source-url"
+                    aria-label="选手资料页链接"
+                    value={photoUrl}
+                    onChange={(e) => {
+                      setPhotoUrl(e.target.value);
+                      setPhotoCandidate(undefined);
+                    }}
+                    placeholder="HLTV / ProSettings 选手链接"
+                  />
+                  <button
+                    className="media-button"
+                    disabled={busy || !photoUrl.trim()}
+                    onClick={() =>
+                      void act(async () => {
+                        const candidate = await request<
+                          NonNullable<MediaItem["photoSource"]>
+                        >("/api/player-photo/preview", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ url: photoUrl }),
+                        });
+                        setPhotoCandidate(candidate);
+                      }, "已获取照片，请核对选手后使用")
+                    }
+                  >
+                    <Download size={15} /> 获取照片预览
+                  </button>
+                  {photoCandidate && (
+                    <div className="photo-source-candidate">
+                      <img
+                        src={photoCandidate.imageUrl}
+                        alt={photoCandidate.name}
+                      />
+                      <div>
+                        {photoCandidate.name} · {photoCandidate.provider}
+                      </div>
+                      <a
+                        href={photoCandidate.pageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        查看资料页 ↗
+                      </a>
+                      <button
+                        className="media-button"
+                        disabled={busy}
+                        onClick={() =>
+                          void act(async () => {
+                            await request(
+                              `/api/media/${selected.id}/photo-source?game=${game}`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(photoCandidate),
+                              },
+                            );
+                            setPhotoCandidate(undefined);
+                          })
+                        }
+                      >
+                        用于 {selected.name}
+                      </button>
+                    </div>
+                  )}
+                  {selected.photoSource && (
+                    <a
+                      href={selected.photoSource.pageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      照片来源：{selected.photoSource.provider} ↗
+                    </a>
+                  )}
+                </section>
+              )}
+              {selected.logoReview && (
+                <div className="logo-review-notice" role="status">
+                  <CircleAlert size={17} />
+                  {selected.logoReview === "ambiguous"
+                    ? "同名有多个队标，请从图标库选择。"
+                    : "缺少队标，请从图标库选择或上传。"}
+                </div>
+              )}
               {(selected.kind === "team"
                 ? ["logo"]
                 : ["portrait", "artwork"]
@@ -557,7 +715,8 @@ export function AssetAdmin() {
             </>
           ) : (
             <div className="media-empty">
-              选择{kind === "team" ? "战队" : "英雄"}
+              选择
+              {kind === "team" ? "战队" : kind === "player" ? "选手" : "英雄"}
             </div>
           )}
         </aside>

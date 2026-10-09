@@ -1,0 +1,433 @@
+{
+  "id": "cs2-monte-og-anubis",
+  "filename": "ebot_monte_vs_og_roobet_cup_2023_anubis.dem",
+  "fetchedAt": "2026-10-09T07:45:18.863Z",
+  "analyzerVersion": "1.11.0",
+  "source": "https://github.com/akiver/cs-demo-analyzer/blob/v1.11.0/tests/snapshots/ebot_monte_vs_og_roobet_cup_2023_anubis.json",
+  "league": "Roobet Cup 2023",
+  "raw": {
+    "game": "CS2",
+    "mapName": "de_anubis",
+    "duration": 2177000000000,
+    "maxRounds": 24,
+    "teamA": {
+      "name": "OG Esports",
+      "letter": "A",
+      "score": 7
+    },
+    "teamB": {
+      "name": "Monte",
+      "letter": "B",
+      "score": 13
+    },
+    "winner": {
+      "name": "Monte",
+      "letter": "B",
+      "score": 13
+    },
+    "players": {
+      "76561197963504595": {
+        "name": "FASHR",
+        "team": {
+          "name": "OG Esports",
+          "letter": "A",
+          "score": 7
+        },
+        "killCount": 10,
+        "deathCount": 16,
+        "assistCount": 4,
+        "healthDamage": 1139,
+        "headshotCount": 7,
+        "kast": 65,
+        "firstKillCount": 0,
+        "utilityDamage": 16
+      },
+      "76561197999825422": {
+        "name": "nexa",
+        "team": {
+          "name": "OG Esports",
+          "letter": "A",
+          "score": 7
+        },
+        "killCount": 9,
+        "deathCount": 15,
+        "assistCount": 5,
+        "healthDamage": 1052,
+        "headshotCount": 5,
+        "kast": 80,
+        "firstKillCount": 1,
+        "utilityDamage": 35
+      },
+      "76561198040577200": {
+        "name": "sdy",
+        "team": {
+          "name": "Monte",
+          "letter": "B",
+          "score": 13
+        },
+        "killCount": 14,
+        "deathCount": 14,
+        "assistCount": 8,
+        "healthDamage": 1568,
+        "headshotCount": 6,
+        "kast": 75,
+        "firstKillCount": 1,
+        "utilityDamage": 68
+      },
+      "76561198060483793": {
+        "name": "br0",
+        "team": {
+          "name": "Monte",
+          "letter": "B",
+          "score": 13
+        },
+        "killCount": 14,
+        "deathCount": 16,
+        "assistCount": 10,
+        "healthDamage": 2016,
+        "headshotCount": 9,
+        "kast": 80,
+        "firstKillCount": 5,
+        "utilityDamage": 109
+      },
+      "76561198098463229": {
+        "name": "regali",
+        "team": {
+          "name": "OG Esports",
+          "letter": "A",
+          "score": 7
+        },
+        "killCount": 16,
+        "deathCount": 14,
+        "assistCount": 5,
+        "healthDamage": 1808,
+        "headshotCount": 8,
+        "kast": 80,
+        "firstKillCount": 4,
+        "utilityDamage": 259
+      },
+      "76561198126171426": {
+        "name": "DemQQ",
+        "team": {
+          "name": "Monte",
+          "letter": "B",
+          "score": 13
+        },
+        "killCount": 14,
+        "deathCount": 12,
+        "assistCount": 7,
+        "healthDamage": 1477,
+        "headshotCount": 8,
+        "kast": 80,
+        "firstKillCount": 1,
+        "utilityDamage": 130
+      },
+      "76561198182462587": {
+        "name": "k1to",
+        "team": {
+          "name": "OG Esports",
+          "letter": "A",
+          "score": 7
+        },
+        "killCount": 17,
+        "deathCount": 17,
+        "assistCount": 7,
+        "healthDamage": 1645,
+        "headshotCount": 12,
+        "kast": 70,
+        "firstKillCount": 1,
+        "utilityDamage": 97
+      },
+      "76561198252434500": {
+        "name": "F1KU",
+        "team": {
+          "name": "OG Esports",
+          "letter": "A",
+          "score": 7
+        },
+        "killCount": 14,
+        "deathCount": 18,
+        "assistCount": 8,
+        "healthDamage": 1356,
+        "headshotCount": 6,
+        "kast": 80,
+        "firstKillCount": 3,
+        "utilityDamage": 136
+      },
+      "76561198296417934": {
+        "name": "kRaSnaL",
+        "team": {
+          "name": "Monte",
+          "letter": "B",
+          "score": 13
+        },
+        "killCount": 13,
+        "deathCount": 15,
+        "assistCount": 5,
+        "healthDamage": 1611,
+        "headshotCount": 6,
+        "kast": 95,
+        "firstKillCount": 3,
+        "utilityDamage": 111
+      },
+      "76561198975452660": {
+        "name": "Woro2k",
+        "team": {
+          "name": "Monte",
+          "letter": "B",
+          "score": 13
+        },
+        "killCount": 25,
+        "deathCount": 9,
+        "assistCount": 1,
+        "healthDamage": 1899,
+        "headshotCount": 10,
+        "kast": 90,
+        "firstKillCount": 1,
+        "utilityDamage": 160
+      }
+    },
+    "rounds": [
+      {
+        "number": 1,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 0,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 3,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 2,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 1,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 3,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 2,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 4,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 3,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 5,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 4,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 6,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 5,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 7,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 1,
+        "teamBScore": 6,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 8,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 2,
+        "teamBScore": 6,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 3,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 9,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 3,
+        "teamBScore": 6,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 3,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 10,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 3,
+        "teamBScore": 7,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 2,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 11,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 4,
+        "teamBScore": 7,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 3,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 12,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 5,
+        "teamBScore": 7,
+        "teamASide": 3,
+        "teamBSide": 2,
+        "winnerSide": 3,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 13,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 5,
+        "teamBScore": 8,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 3,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 14,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 5,
+        "teamBScore": 9,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 3,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 15,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 6,
+        "teamBScore": 9,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 2,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 16,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 7,
+        "teamBScore": 9,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 2,
+        "winnerName": "OG Esports",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 17,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 7,
+        "teamBScore": 10,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 3,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 18,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 7,
+        "teamBScore": 11,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 3,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 19,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 7,
+        "teamBScore": 12,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 3,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      },
+      {
+        "number": 20,
+        "teamAName": "OG Esports",
+        "teamBName": "Monte",
+        "teamAScore": 7,
+        "teamBScore": 13,
+        "teamASide": 2,
+        "teamBSide": 3,
+        "winnerSide": 3,
+        "winnerName": "Monte",
+        "overtimeNumber": 0
+      }
+    ]
+  }
+}

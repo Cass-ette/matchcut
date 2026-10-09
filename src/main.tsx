@@ -34,11 +34,16 @@ import {
   DEFAULT_MATCH,
   BgmTrack,
   DEFAULT_LOL_MATCH,
+  DEFAULT_CS_MATCH,
+  Game,
+  gameTitle,
   FPS,
   VIDEO_WIDTH,
   VIDEO_HEIGHT,
   ReportData,
   sceneNames,
+  sceneSlots,
+  csMapIcon,
   positionNames,
   sideName,
   matchIdSchema,
@@ -57,6 +62,7 @@ import {
 } from "./domain";
 import { MatchFilm } from "./video/MatchFilm";
 import { groupLolSeries, LolSummary } from "./series";
+import type { CsSummary } from "./cs";
 import "./style.css";
 import { AssetAdmin } from "./AssetAdmin";
 
@@ -140,6 +146,10 @@ function App() {
     [lolSearch, setLolSearch] = useState(""),
     [importReport, setImportReport] = useState("");
   const lolInput = useRef<HTMLInputElement>(null);
+  const csInput = useRef<HTMLInputElement>(null);
+  const [csMatches, setCsMatches] = useState<CsSummary[]>([]);
+  const [csSearch, setCsSearch] = useState("");
+  const [csImporting, setCsImporting] = useState(false);
   const [bgmTracks, setBgmTracks] = useState<BgmTrack[]>([]);
   const bgmInput = useRef<HTMLInputElement>(null),
     bgmPreview = useRef<HTMLAudioElement>(null);
@@ -177,7 +187,9 @@ function App() {
             : data.settings,
         );
         setSource(
-          data.match.game === "lol" ? "current" : prefs?.source || "current",
+          data.match.game === "lol" || data.match.game === "cs2"
+            ? "current"
+            : prefs?.source || "current",
         );
         setLeagueId(prefs?.leagueId || "");
         setTeamId(prefs?.teamId || "");
@@ -194,6 +206,10 @@ function App() {
   useEffect(() => {
     if (!match) return;
     localStorage.setItem("matchcut-game", match.game || "dota2");
+    if (match.game === "cs2")
+      api("/api/cs/matches")
+        .then(setCsMatches)
+        .catch((e) => setError(e.message));
     if (match.game === "lol")
       api("/api/lol/matches")
         .then(setLolMatches)
@@ -234,7 +250,11 @@ function App() {
         if (value.props && appliedJob.current !== value.id) {
           appliedJob.current = value.id;
           setMatch(value.props.match);
-          if (value.props.match.game === "lol") setSource("current");
+          if (
+            value.props.match.game === "lol" ||
+            value.props.match.game === "cs2"
+          )
+            setSource("current");
           setMatchId(value.props.match.id);
           setSettings(value.props.settings);
         }
@@ -349,7 +369,7 @@ function App() {
       setRecentLoading(false);
     }
   }
-  async function switchGame(game: "dota2" | "lol") {
+  async function switchGame(game: Game) {
     if (!settings || busy || loading) return;
     setLoading(true);
     try {
@@ -368,6 +388,36 @@ function App() {
     } catch (e) {
       setError((e as Error).message);
       setLoading(false);
+    }
+  }
+  async function importCs(file: File) {
+    setLoading(true);
+    setCsImporting(true);
+    setError("");
+    try {
+      if (!/\.dem$/i.test(file.name))
+        throw new Error("请选择已解压的 .dem 文件。");
+      if (file.size > 1024 * 1024 * 1024)
+        throw new Error("Demo 不能超过 1 GB。");
+      const report = await api(
+        "/api/cs/import?filename=" + encodeURIComponent(file.name),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file,
+        },
+      );
+      setCsMatches(await api("/api/cs/matches"));
+      await load(report.id);
+      setToast(
+        report.cached ? "这份 Demo 已在比赛库中" : "Demo 解析完成，已载入比赛",
+      );
+    } catch (e) {
+      setError("Demo 导入失败：" + (e as Error).message);
+    } finally {
+      setLoading(false);
+      setCsImporting(false);
+      if (csInput.current) csInput.current.value = "";
     }
   }
   async function importLol(file: File) {
@@ -579,8 +629,12 @@ function App() {
       </div>
     );
   const winner = match.winner ? match[match.winner] : "双方";
-  const lol = match.game === "lol";
-  const scenes = sceneNames(match);
+  const lol = match.game === "lol",
+    cs = match.game === "cs2";
+  const scenes = sceneSlots(match).map((index, order) => ({
+    index,
+    name: sceneNames(match)[order],
+  }));
   const positions = positionNames(match);
   const matchups = comparisons(match, settings);
   const assigned = assignedPositions(match, settings);
@@ -625,21 +679,21 @@ function App() {
       <div className="page-intro">
         <div>
           <div className="eyebrow">
-            POST-MATCH PRODUCTION / {lol ? "LEAGUE OF LEGENDS" : "DOTA 2"}
+            POST-MATCH PRODUCTION / {gameTitle(match)}
           </div>
           <h1>
             赛后，数据上场<span>。</span>
           </h1>
           <p>
-            选手雷达 · {lol ? "团队资源" : "经济走势"} ·
-            伤害排行。选一场比赛，生成横屏赛后视频。
+            选手雷达 · {cs ? "K / D / A 排名" : lol ? "团队资源" : "经济走势"} ·
+            {cs ? "击杀排行" : "伤害排行"}。选一场比赛，生成横屏赛后视频。
           </p>
         </div>
         <div className="workspace-label">
           <Film size={17} />
           <div className="game-switch" aria-label="切换游戏">
             <button
-              className={!lol ? "selected" : ""}
+              className={!lol && !cs ? "selected" : ""}
               disabled={loading || busy}
               onClick={() => void switchGame("dota2")}
             >
@@ -651,6 +705,13 @@ function App() {
               onClick={() => void switchGame("lol")}
             >
               英雄联盟
+            </button>
+            <button
+              className={cs ? "selected" : ""}
+              disabled={loading || busy}
+              onClick={() => void switchGame("cs2")}
+            >
+              CS
             </button>
           </div>
         </div>
@@ -668,9 +729,91 @@ function App() {
           <div className="panel-title">
             <span className="step-dot">1</span>
             <h2>选择比赛</h2>
-            <span className="tiny-tag">{lol ? "LOL" : "DOTA 2"}</span>
+            <span className="tiny-tag">
+              {cs ? "CS" : lol ? "LOL" : "DOTA 2"}
+            </span>
           </div>
-          {lol ? (
+          {cs ? (
+            <div className="lol-source cs-source">
+              <div className="source-status">
+                <span className="status-dot" /> 本地 Demo 比赛库
+              </div>
+              <button
+                className="csv-import"
+                disabled={loading || busy}
+                onClick={() => csInput.current?.click()}
+              >
+                {csImporting ? (
+                  <LoaderCircle size={16} className="spin" />
+                ) : (
+                  <Upload size={16} />
+                )}
+                {csImporting ? "正在上传并解析 Demo…" : "导入 CS Demo"}
+              </button>
+              <input
+                type="file"
+                accept=".dem"
+                aria-label="导入 CS Demo 文件"
+                hidden
+                ref={csInput}
+                disabled={loading || busy}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) void importCs(e.target.files[0]);
+                }}
+              />
+              <p>
+                支持完整 5v5 的 CS2 / CS:GO .dem，最大 1
+                GB。压缩包请先解压，解析通常需要几十秒。每份 Demo 对应一张地图。
+              </p>
+              <input
+                aria-label="筛选 CS 比赛"
+                placeholder="战队、地图或文件名"
+                value={csSearch}
+                onChange={(e) => setCsSearch(e.target.value)}
+              />
+              <div className="lol-match-list cs-match-list">
+                {csMatches
+                  .filter((m) =>
+                    `${m.radiant} ${m.dire} ${m.map} ${m.filename}`
+                      .toLowerCase()
+                      .includes(csSearch.toLowerCase()),
+                  )
+                  .slice(0, 50)
+                  .map((m) => (
+                    <button
+                      key={m.id}
+                      className={match.id === m.id ? "selected" : ""}
+                      disabled={loading || busy}
+                      onClick={() => void load(m.id)}
+                    >
+                      <span>
+                        {csMapIcon(m.map) && (
+                          <img
+                            src={csMapIcon(m.map)}
+                            alt=""
+                            style={{
+                              width: 24,
+                              height: 24,
+                              objectFit: "contain",
+                              verticalAlign: "middle",
+                              marginRight: 7,
+                            }}
+                          />
+                        )}
+                        {m.map} · {m.radiantScore} : {m.direScore}
+                        {m.id === DEFAULT_CS_MATCH ? " · 内置真实比赛" : ""}
+                      </span>
+                      <b>
+                        {m.radiant} vs {m.dire}
+                      </b>
+                    </button>
+                  ))}
+              </div>
+              <small>
+                共 {csMatches.length} 张地图 · 按导入时间排序 · 可离线重复生成
+              </small>
+            </div>
+          ) : lol ? (
             <div className="lol-source">
               <div className="source-status">
                 <span className="status-dot" /> CSV 比赛库{" "}
@@ -976,9 +1119,11 @@ function App() {
               <span>
                 {match.series
                   ? "系列赛累计"
-                  : lol
-                    ? "G" + (match.gameNumber || "—")
-                    : "单局"}
+                  : cs
+                    ? match.cs?.map
+                    : lol
+                      ? "G" + (match.gameNumber || "—")
+                      : "单局"}
               </span>
             </div>
             <div className="team-row">
@@ -1012,25 +1157,36 @@ function App() {
           <div className="source-caption">
             {source === "latest"
               ? "当前画面为预览比赛；生成时更新数据。"
-              : match.id === DEFAULT_MATCH || match.id === DEFAULT_LOL_MATCH
-                ? "内置历史真实比赛 · " +
-                  match.date.slice(0, 10) +
-                  " · 可离线生成"
-                : "已保存比赛快照 · 可重复生成"}
+              : match.id === DEFAULT_CS_MATCH
+                ? "内置历史真实比赛 · Roobet Cup 2023 · 可离线生成"
+                : match.id === DEFAULT_MATCH || match.id === DEFAULT_LOL_MATCH
+                  ? "内置历史真实比赛 · " +
+                    match.date.slice(0, 10) +
+                    " · 可离线生成"
+                  : "已保存比赛快照 · 可重复生成"}
           </div>
+          {Boolean(match.logoReview?.length) && (
+            <a
+              className="team-logo-review"
+              href={`/admin?game=${match.game || "dota2"}&filter=review`}
+            >
+              <span aria-hidden="true" /> {match.logoReview!.length}{" "}
+              支战队的队标待确认 <ArrowRight size={13} />
+            </a>
+          )}
           <div className="section-divider" />
           <div className="subheading">
             <span>节目编排</span>
-            <span>5 幕</span>
+            <span>{scenes.length} 幕</span>
           </div>
           <div className="story-list">
-            {scenes.map((name, i) => (
+            {scenes.map(({ name, index: i }, order) => (
               <button
                 key={name}
                 onClick={() => seek(i)}
                 className={scene === i ? "current" : ""}
               >
-                <span className="scene-num">0{i + 1}</span>
+                <span className="scene-num">0{order + 1}</span>
                 <div>
                   <b>{name}</b>
                   <small>
@@ -1047,14 +1203,22 @@ function App() {
                         settings.radarMode === "damage"
                           ? "双方伤害最高"
                           : settings.radarPosition === "all"
-                            ? lol
-                              ? "上 / 野 / 中 / 下 / 辅"
-                              : "一至五号位 · 五组对位"
+                            ? cs
+                              ? settings.radarMode === "ranked"
+                                ? "双方 K / D / A 排名前五"
+                                : "五组手动位置"
+                              : lol
+                                ? "上 / 野 / 中 / 下 / 辅"
+                                : "一至五号位 · 五组对位"
                             : positions[
                                 Number(settings.radarPosition) as
                                   1 | 2 | 3 | 4 | 5
                               ],
-                        match.series ? "选手累计输出前五" : "全场输出前五",
+                        cs
+                          ? "击杀多、死亡少、助攻多"
+                          : match.series
+                            ? "选手累计输出前五"
+                            : "全场输出前五",
                         "比分与赛果回顾",
                       ][i]
                     }
@@ -1071,9 +1235,11 @@ function App() {
             <div>
               <b>数据有出处，内容可追溯</b>
               <p>
-                {lol
-                  ? "Oracle’s Elixir CSV · 第三方职业赛数据"
-                  : "OpenDota API · 不依赖网页抓取"}
+                {cs
+                  ? "本地 Demo · 比赛日期未记录"
+                  : lol
+                    ? "Oracle’s Elixir CSV · 第三方职业赛数据"
+                    : "OpenDota API · 不依赖网页抓取"}
                 <br />
                 原始数据随视频一同保存
               </p>
@@ -1096,7 +1262,7 @@ function App() {
           </div>
           <div className="preview-stage">
             <div className="stage-badge">
-              <span /> {scenes[scene]}{" "}
+              <span /> {sceneNames(match)[sceneSlots(match).indexOf(scene)]}{" "}
               <span className="preview-indicator">预览</span>
             </div>
             <div className="player-shell">
@@ -1130,13 +1296,13 @@ function App() {
             </div>
           </div>
           <div className="scene-strip">
-            {scenes.map((name, i) => (
+            {scenes.map(({ name, index: i }, order) => (
               <button
                 key={name}
                 onClick={() => seek(i)}
                 className={scene === i ? "active" : ""}
               >
-                <span>0{i + 1}</span>
+                <span>0{order + 1}</span>
                 {name}
               </button>
             ))}
@@ -1145,7 +1311,11 @@ function App() {
             <div className="subheading">
               <span>雷达对比</span>
               <span>
-                {settings.radarMode === "positions" ? "按职责对位" : "输出焦点"}
+                {settings.radarMode === "positions"
+                  ? "按职责对位"
+                  : cs
+                    ? "K / D / A 排名"
+                    : "输出焦点"}
               </span>
             </div>
             <div className="comparison-controls">
@@ -1158,12 +1328,21 @@ function App() {
                   })
                 }
               >
-                <option value="positions">按位置对比（默认）</option>
-                <option value="damage">双方伤害最高</option>
+                {cs && (
+                  <option value="ranked">按 K / D / A 排名（默认）</option>
+                )}
+                <option value="positions">
+                  {cs ? "按选手位置（手动指定）" : "按位置对比（默认）"}
+                </option>
+                {!cs && <option value="damage">双方伤害最高</option>}
               </select>
-              {settings.radarMode === "positions" && (
+              {settings.radarMode !== "damage" && (
                 <select
-                  aria-label="展示位置"
+                  aria-label={
+                    cs && settings.radarMode === "ranked"
+                      ? "展示排名"
+                      : "展示位置"
+                  }
                   value={settings.radarPosition}
                   onChange={(e) =>
                     changeComparison({
@@ -1172,10 +1351,16 @@ function App() {
                     })
                   }
                 >
-                  <option value="all">全部五组对位</option>
+                  <option value="all">
+                    {cs && settings.radarMode === "ranked"
+                      ? "全部五组排名"
+                      : "全部五组对位"}
+                  </option>
                   {POSITIONS.map((position) => (
                     <option key={position} value={String(position)}>
-                      {positions[position]}
+                      {cs && settings.radarMode === "ranked"
+                        ? "第 " + position + " 名"
+                        : positions[position]}
                     </option>
                   ))}
                 </select>
@@ -1214,9 +1399,11 @@ function App() {
                   核对 / 修正选手位置 <span>仅影响本场比赛</span>
                 </summary>
                 <p>
-                  {lol
-                    ? "位置来自 CSV 的 top / jng / mid / bot / sup 记录。"
-                    : "位置来自 OpenDota 的估计，不按玩家列表顺序分配。"}
+                  {cs
+                    ? "Demo 不标注可靠职责，请手动指定。选手可能兼任职责，这里每人选择一个用于比较的位置，不作为官方阵容声明。"
+                    : lol
+                      ? "位置来自 CSV 的 top / jng / mid / bot / sup 记录。"
+                      : "位置来自 OpenDota 的估计，不按玩家列表顺序分配。"}
                   选择已占用的位置会交换两人；换比赛后重新读取位置。
                 </p>
                 <div className="position-teams">
@@ -1270,19 +1457,27 @@ function App() {
                   }
                 >
                   <RefreshCw size={13} />{" "}
-                  {lol ? "恢复 CSV 位置" : "恢复数据源估计"}
+                  {cs
+                    ? "清空手动位置"
+                    : lol
+                      ? "恢复 CSV 位置"
+                      : "恢复数据源估计"}
                 </button>
               </details>
             )}
             {incomplete && (
               <p className="error-text" role="alert">
-                有位置缺失或重复，请修正后生成；不会用伤害排名替代对位。
+                {cs
+                  ? "位置尚未指定完整，请补齐所选位置，或切换到 K / D / A 排名生成。"
+                  : "有位置缺失或重复，请修正后生成；不会用伤害排名替代对位。"}
               </p>
             )}
             <p className="comparison-note">
-              {lol
-                ? "上 / 野 / 中 / 下：击杀、助攻、总经济/分、补刀/分、伤害/分、参团率。辅助：助攻、参团率、视野得分、放置守卫、排除守卫、购买控制守卫。"
-                : "一至三号位：击杀、助攻、经济、经验、伤害、推塔。四、五号位：助攻、参战率、观察守卫、岗哨守卫、眩晕时长、治疗。"}
+              {cs
+                ? "K / D / A 排序：击杀多优先，其次死亡少，最后助攻多。雷达：击杀、ADR（每回合对敌生命伤害）、KAST、爆头率、首杀、道具伤害。缺失指标显示 —。"
+                : lol
+                  ? "上 / 野 / 中 / 下：击杀、助攻、总经济/分、补刀/分、伤害/分、参团率。辅助：助攻、参团率、视野得分、放置守卫、排除守卫、购买控制守卫。"
+                  : "一至三号位：击杀、助攻、经济、经验、伤害、推塔。四、五号位：助攻、参战率、观察守卫、岗哨守卫、眩晕时长、治疗。"}
               {match.series
                 ? "系列赛按同位置累计，轮换选手共同计入该位置；每分钟数值用总量除以出场时长，参团率按出场局队伍击杀加权。伤害排行按选手分别累计。"
                 : "均为本场数据，非能力评级。"}
@@ -1599,6 +1794,42 @@ function App() {
                   <i />
                 </label>
               ))}
+              <label className="field-label">选手画面</label>
+              {!cs && (
+                <select
+                  aria-label="选手画面"
+                  value={settings.playerVisual}
+                  onChange={(e) =>
+                    patch(
+                      "playerVisual",
+                      e.target.value as Settings["playerVisual"],
+                    )
+                  }
+                >
+                  <option value="hero">英雄</option>
+                  <option value="photo">选手定妆照</option>
+                </select>
+              )}
+              {cs && <div className="small-notice">选手定妆照</div>}
+              {(cs || settings.playerVisual === "photo") &&
+                match.players.some(
+                  (p) => !p.playerImage && !p.playerArtwork,
+                ) && (
+                  <div className="small-notice">
+                    {
+                      match.players.filter(
+                        (p) => !p.playerImage && !p.playerArtwork,
+                      ).length
+                    }{" "}
+                    位选手待补照片，当前显示姓名缩写。
+                  </div>
+                )}
+              <a
+                className="text-button"
+                href={`/admin?game=${match.game || "dota2"}&kind=player`}
+              >
+                <Upload size={13} /> 管理选手照片
+              </a>
               <label className="field-label">特效强度</label>
               <select
                 aria-label="特效强度"
@@ -1651,10 +1882,10 @@ function App() {
                 value={settings.headline}
                 onChange={(e) => patch("headline", e.target.value)}
               />
-              {scenes.map((name, i) => (
+              {scenes.map(({ name, index: i }, order) => (
                 <div className="script-block" key={name}>
                   <label className="field-label">
-                    0{i + 1} · {name}
+                    0{order + 1} · {name}
                   </label>
                   <textarea
                     rows={4}
@@ -1758,9 +1989,11 @@ function App() {
       <footer className="page-footer">
         <span>MATCHCUT / BUILT FOR THE NEXT GAME</span>
         <span>
-          {lol
-            ? "英雄联盟 · Oracle’s Elixir 数据 / Riot Games 英雄素材"
-            : "Dota 2 · OpenDota 职业赛数据"}
+          {cs
+            ? "CS · 本地 Demo 数据 / CS Demo Analyzer"
+            : lol
+              ? "英雄联盟 · Oracle’s Elixir 数据 / Riot Games 英雄素材"
+              : "Dota 2 · OpenDota 职业赛数据"}
         </span>
       </footer>
       {toast && (
@@ -1852,21 +2085,25 @@ function App() {
               </button>
             </div>
             <p>
-              第一次使用，直接点击「一键生成视频」即可。内置一场真实职业赛的数据和英雄图片，不需要
+              第一次使用，直接点击「一键生成视频」即可。内置真实职业赛数据，不需要
               API 密钥。
             </p>
             <ol>
               <li>
                 <b>换比赛：</b>
-                {lol
-                  ? "导入 Oracle’s Elixir CSV，按战队、联赛或日期筛选。可选择 G1–G5 生成单局，或切换「系列赛汇总」统计已收录局。"
-                  : "输入 OpenDota 比赛编号，或浏览最近职业赛。"}
+                {cs
+                  ? "导入完整 5v5 的 .dem，每份文件是一张地图；支持 CS2 和 CS:GO。"
+                  : lol
+                    ? "导入 Oracle’s Elixir CSV，按战队、联赛或日期筛选。可选择 G1–G5 生成单局，或切换「系列赛汇总」统计已收录局。"
+                    : "输入 OpenDota 比赛编号，或浏览最近职业赛。"}
               </li>
               <li>
                 <b>长期使用：</b>
-                {lol
-                  ? "CSV 与游戏外观设置保存在本机。最新数据自动同步尚未接通，需要自行下载更新的 CSV 后导入。"
-                  : "选「自动最新」，可关注战队以跨赛事跟进，也可限定联赛编号。外观设置会保存，比赛文案每次自动更新。"}
+                {cs
+                  ? "原始 Demo、解析数据与设置保存在本机。没有自动最新和系列赛合并，请逐张地图导入。"
+                  : lol
+                    ? "CSV 与游戏外观设置保存在本机。最新数据自动同步尚未接通，需要自行下载更新的 CSV 后导入。"
+                    : "选「自动最新」，可关注战队以跨赛事跟进，也可限定联赛编号。外观设置会保存，比赛文案每次自动更新。"}
               </li>
               <li>
                 <b>个性化：</b>
@@ -1882,22 +2119,34 @@ function App() {
               时，视频不含音轨。也可以在节目设置里导入音乐，调整音量和循环，与视频一起导出。音乐保存在本机，下次可直接复用。镜头时长随字幕长度与节奏设置调整。数据不完整时会明确提示，不自动填零。
             </p>
             <p>
-              雷达默认按{lol ? "上单、打野、中单、下路、辅助" : "一至五号位"}
-              逐组对比，可只选一个位置，也可切换为双方伤害最高。 位置来自
-              {lol ? "CSV 记录" : "OpenDota 估计"}，可手动修正；每轴较高者为
-              100%，不代表综合能力。
+              {cs ? (
+                <>
+                  默认按击杀多、死亡少、助攻多排序，也可手动指定选手位置。每轴以对比二人较高值归一化，不代表综合能力。
+                </>
+              ) : (
+                <>
+                  雷达默认按
+                  {lol ? "上单、打野、中单、下路、辅助" : "一至五号位"}
+                  逐组对比，可只选一个位置，也可切换为双方伤害最高。 位置来自
+                  {lol ? "CSV 记录" : "OpenDota 估计"}，可手动修正；每轴较高者为
+                  100%，不代表综合能力。
+                </>
+              )}
             </p>
             <div className="help-source">
               <a
                 href={
-                  lol
-                    ? "https://oracleselixir.com/tools/downloads"
-                    : "https://www.opendota.com/"
+                  cs
+                    ? "https://github.com/akiver/cs-demo-analyzer"
+                    : lol
+                      ? "https://oracleselixir.com/tools/downloads"
+                      : "https://www.opendota.com/"
                 }
                 target="_blank"
                 rel="noreferrer"
               >
-                {lol ? "Oracle’s Elixir" : "OpenDota"} ↗
+                {cs ? "CS Demo Analyzer" : lol ? "Oracle’s Elixir" : "OpenDota"}{" "}
+                ↗
               </a>
               <a
                 href="https://www.remotion.dev/"

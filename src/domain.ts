@@ -5,10 +5,26 @@ export const VIDEO_WIDTH = 1920;
 export const VIDEO_HEIGHT = 1080;
 export const DEFAULT_MATCH = "9035078952";
 export const DEFAULT_LOL_MATCH = "lol-LOLTMNT02_76144";
-export type Game = "dota2" | "lol";
+export const DEFAULT_CS_MATCH = "cs2-monte-og-anubis";
+export type Game = "dota2" | "lol" | "cs2";
+export const csMapIcon = (map: string) =>
+  [
+    "ancient",
+    "anubis",
+    "dust2",
+    "inferno",
+    "mirage",
+    "nuke",
+    "overpass",
+    "train",
+    "vertigo",
+    "cache",
+  ].includes(map)
+    ? `/assets/cs/maps/${map}.png`
+    : undefined;
 export const matchIdSchema = z
   .string()
-  .regex(/^(?:\d{6,15}|lol-[A-Za-z0-9_-]{1,100})$/);
+  .regex(/^(?:\d{6,15}|(?:lol|cs2)-[A-Za-z0-9_-]{1,100})$/);
 export const SCENES = [
   "比赛战报",
   "经济走势",
@@ -33,15 +49,31 @@ export const LOL_POSITION_NAMES: Record<Position, string> = {
   4: "下路",
   5: "辅助",
 };
+export const CS_POSITION_NAMES: Record<Position, string> = {
+  1: "狙击手",
+  2: "突破手",
+  3: "自由人",
+  4: "辅助",
+  5: "指挥",
+};
 export const positionNames = (m: ReportData) =>
-  m.game === "lol" ? LOL_POSITION_NAMES : POSITION_NAMES;
-export const sceneNames = (m: ReportData) =>
-  m.series
-    ? ["系列赛比分", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
+  m.game === "cs2"
+    ? CS_POSITION_NAMES
     : m.game === "lol"
-      ? ["比赛战报", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
-      : SCENES;
+      ? LOL_POSITION_NAMES
+      : POSITION_NAMES;
+export const sceneNames = (m: ReportData) =>
+  m.game === "cs2"
+    ? ["地图战报", "选手雷达", "击杀排行", "赛果回顾"]
+    : m.series
+      ? ["系列赛比分", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
+      : m.game === "lol"
+        ? ["比赛战报", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
+        : SCENES;
+export const sceneSlots = (m: ReportData) =>
+  m.game === "cs2" ? [0, 2, 3, 4] : [0, 1, 2, 3, 4];
 export function gameScope(m: ReportData): string {
+  if (m.cs) return m.cs.map;
   if (!m.series) return m.gameNumber ? `G${m.gameNumber}` : "本场";
   const numbers = m.series.games.map((g) => g.gameNumber);
   const games = numbers.every((n): n is number => n !== undefined)
@@ -57,11 +89,23 @@ export function gameScope(m: ReportData): string {
   );
 }
 export const gameName = (m: ReportData) =>
-  m.game === "lol" ? "英雄联盟" : "Dota 2";
+  m.game === "cs2"
+    ? m.cs?.version === "CSGO"
+      ? "CS:GO"
+      : "CS2"
+    : m.game === "lol"
+      ? "英雄联盟"
+      : "Dota 2";
+export const gameTitle = (m: ReportData) =>
+  m.game === "lol" ? "LEAGUE OF LEGENDS" : gameName(m).toUpperCase();
 export const providerName = (m: ReportData) =>
-  m.game === "lol" ? "Oracle’s Elixir" : "OpenDota";
+  m.game === "cs2"
+    ? "CS Demo Analyzer"
+    : m.game === "lol"
+      ? "Oracle’s Elixir"
+      : "OpenDota";
 export const sideName = (m: ReportData, side: "radiant" | "dire") =>
-  m.series
+  m.series || m.game === "cs2"
     ? m[side]
     : m.game === "lol"
       ? side === "radiant"
@@ -71,7 +115,11 @@ export const sideName = (m: ReportData, side: "radiant" | "dire") =>
         ? "天辉"
         : "夜魇";
 export const isSupport = (m: ReportData, position?: Position) =>
-  Boolean(position && (m.game === "lol" ? position === 5 : position >= 4));
+  Boolean(
+    m.game !== "cs2" &&
+    position &&
+    (m.game === "lol" ? position === 5 : position >= 4),
+  );
 const positionOverridesSchema = z.object({
   matchId: matchIdSchema,
   roles: z.record(
@@ -82,6 +130,7 @@ const positionOverridesSchema = z.object({
 export const settingsSchema = z.object({
   theme: z.enum(["ember", "glacier", "paper", "obsidian"]).default("ember"),
   effects: z.enum(["restrained", "arena"]).default("arena"),
+  playerVisual: z.enum(["hero", "photo"]).default("hero"),
   accent: colorSchema.default("#ff6138"),
   secondary: colorSchema.default("#50d9ed"),
   brand: z.string().trim().min(1).max(24).default("赛后雷达"),
@@ -91,7 +140,7 @@ export const settingsSchema = z.object({
   captions: z.boolean().default(true),
   scripts: z.array(z.string().trim().max(240)).length(5),
   resolution: z.enum(["1080", "720"]).default("1080"),
-  radarMode: z.enum(["positions", "damage"]).default("positions"),
+  radarMode: z.enum(["positions", "damage", "ranked"]).default("positions"),
   radarPosition: z.enum(["all", "1", "2", "3", "4", "5"]).default("all"),
   positionOverrides: positionOverridesSchema.optional(),
   bgm: z
@@ -117,15 +166,26 @@ export type PlayerData = {
   heroId: number;
   image: string;
   artwork?: string;
+  playerId?: string;
+  playerImage?: string;
+  playerArtwork?: string;
   side: "radiant" | "dire";
   kills: number;
   deaths: number;
   assists: number;
-  gpm: number;
+  gpm?: number;
   xpm?: number;
   damage: number;
   tower?: number;
-  lastHits: number;
+  lastHits?: number;
+  steamId?: string;
+  cs?: {
+    adr: number;
+    kast?: number;
+    headshotPercent?: number;
+    openingKills?: number;
+    utilityDamage?: number;
+  };
   positionEstimate?: Position;
   declaredPosition?: Position;
   wardsKilled?: number;
@@ -153,6 +213,7 @@ export type MatchData = {
   direId?: number;
   radiantLogo?: string;
   direLogo?: string;
+  logoReview?: { side: "radiant" | "dire"; reason: "ambiguous" | "missing" }[];
   radiantScore: number;
   direScore: number;
   winner: "radiant" | "dire";
@@ -163,6 +224,20 @@ export type MatchData = {
   objectives?: { label: string; radiant?: number; dire?: number }[];
   gameNumber?: number;
   patch?: string;
+  cs?: {
+    version: "CS2" | "CSGO";
+    map: string;
+    filename: string;
+    maxRounds: number;
+    rounds: {
+      number: number;
+      radiantScore: number;
+      direScore: number;
+      winner: "radiant" | "dire";
+      radiantSide: "CT" | "T";
+      overtime: number;
+    }[];
+  };
 };
 export type SeriesDetails = {
   games: Pick<
@@ -243,6 +318,10 @@ export function normalizeMatch(
     const hero = heroes[String(heroId)];
     return {
       slot,
+      playerId:
+        Number.isSafeInteger(p.account_id) && p.account_id > 0
+          ? String(p.account_id)
+          : `match:${raw.match_id}:${slot}`,
       name: safeText(
         p.name,
         safeText(p.personaname, "选手 " + ((slot % 128) + 1)),
@@ -373,6 +452,7 @@ export type Comparison = {
   key: string;
   label: string;
   position?: Position;
+  rank?: number;
   pair?: [PlayerData, PlayerData];
   provenance: string;
 };
@@ -383,9 +463,29 @@ export function comparisons(m: ReportData, s: Settings): Comparison[] {
         key: "damage",
         label: "双方伤害最高",
         pair: getFocus(m),
-        provenance: "按英雄总伤害选取 · 不要求同位置",
+        provenance:
+          m.game === "cs2"
+            ? "按对敌生命伤害选取"
+            : "按英雄总伤害选取 · 不要求同位置",
       },
     ];
+  if (m.game === "cs2" && s.radarMode === "ranked") {
+    const sides = ["radiant", "dire"].map((side) =>
+      m.players.filter((p) => p.side === side).sort(csPlayerOrder),
+    );
+    return (
+      s.radarPosition === "all" ? POSITIONS : [Number(s.radarPosition)]
+    ).map((rank) => ({
+      key: "rank-" + rank,
+      label: "K / D / A 第 " + rank + " 名",
+      rank,
+      pair: [sides[0][rank - 1], sides[1][rank - 1]] as [
+        PlayerData,
+        PlayerData,
+      ],
+      provenance: "击杀多优先，其次死亡少，最后助攻多",
+    }));
+  }
   const assigned = assignedPositions(m, s);
   const positions =
     s.radarPosition === "all"
@@ -409,13 +509,15 @@ export function comparisons(m: ReportData, s: Settings): Comparison[] {
           ? "位置未确定 · 请修正对位"
           : a.source === "manual" && b.source === "manual"
             ? "位置：手动指定"
-            : m.game === "lol"
-              ? a.source === "declared" && b.source === "declared"
-                ? "位置：Oracle’s Elixir 记录"
-                : "位置：手动指定 / CSV 记录"
-              : a.source === "estimate" && b.source === "estimate"
-                ? "位置：OpenDota 估计"
-                : "位置：手动指定 / OpenDota 估计",
+            : m.game === "cs2"
+              ? "位置：手动指定"
+              : m.game === "lol"
+                ? a.source === "declared" && b.source === "declared"
+                  ? "位置：Oracle’s Elixir 记录"
+                  : "位置：手动指定 / CSV 记录"
+                : a.source === "estimate" && b.source === "estimate"
+                  ? "位置：OpenDota 估计"
+                  : "位置：手动指定 / OpenDota 估计",
     };
   });
 }
@@ -443,6 +545,14 @@ export function comparisonScript(m: ReportData, s: Settings) {
     const [a, b] = getFocus(m);
     return `双方伤害最高 · ${a.name} vs ${b.name}`;
   }
+  if (m.game === "cs2" && s.radarMode === "ranked")
+    return s.radarPosition === "all"
+      ? "全员选手雷达"
+      : comparisons(m, s)[0].label +
+          " · " +
+          comparisons(m, s)[0]
+            .pair?.map((p) => p.name)
+            .join(" vs ");
   if (s.radarPosition === "all")
     return m.series ? "系列赛对位雷达" : "全场对位雷达";
   const comparison = comparisons(m, s)[0];
@@ -460,6 +570,7 @@ export function refreshSettings(
   const defaults = defaultSettings(m);
   const settings = {
     ...previous,
+    playerVisual: m.game === "cs2" ? ("photo" as const) : previous.playerVisual,
     headline: defaults.headline,
     scripts: defaults.scripts.map((text, i) =>
       previous.scripts[i].trim() ? text : "",
@@ -475,6 +586,13 @@ export function refreshSettings(
 }
 export const sortedDamage = (m: ReportData) =>
   [...(m.series?.players ?? m.players)].sort((a, b) => b.damage - a.damage);
+export const csPlayerOrder = (a: PlayerData, b: PlayerData) =>
+  b.kills - a.kills ||
+  a.deaths - b.deaths ||
+  b.assists - a.assists ||
+  (a.steamId || "").localeCompare(b.steamId || "");
+export const rankedPlayers = (m: ReportData) =>
+  m.game === "cs2" ? [...m.players].sort(csPlayerOrder) : sortedDamage(m);
 export function facts(m: ReportData) {
   const max = m.gold.reduce(
     (a, b) => (b.value > a.value ? b : a),
@@ -492,12 +610,30 @@ export function facts(m: ReportData) {
     min,
     winner,
     deficit,
-    top: sortedDamage(m)[0],
+    top: rankedPlayers(m)[0],
     final: m.gold[m.gold.length - 1],
   };
 }
 export function defaultSettings(m: ReportData): Settings {
   const f = facts(m);
+  if (m.cs) {
+    const headline = `${f.winner} ${Math.max(m.radiantScore, m.direScore)} : ${Math.min(m.radiantScore, m.direScore)} 拿下 ${m.cs.map}`;
+    return settingsSchema.parse({
+      theme: "obsidian",
+      accent: "#f6c453",
+      secondary: "#c4d0e4",
+      radarMode: "ranked",
+      playerVisual: "photo",
+      headline: headline.length <= 44 ? headline : `${m.cs.map} · 地图战报`,
+      scripts: [
+        `${m.radiant} ${m.radiantScore} : ${m.direScore} ${m.dire}`,
+        "",
+        "全员选手雷达",
+        `击杀第一 · ${f.top.name} · ${f.top.kills} 杀`,
+        "",
+      ],
+    });
+  }
   if (m.series) {
     const { wins, missingGames } = m.series;
     const score = `${m.radiant} ${wins.radiant} : ${wins.dire} ${m.dire}`;
@@ -564,69 +700,89 @@ export function radar(
     b: number | undefined;
     unit?: string;
   }[] =
-    m.game === "lol"
-      ? isSupport(m, position)
-        ? [
-            { label: "助攻", a: a.assists, b: b.assists },
-            {
-              label: "参团率",
-              a: participation(m, a),
-              b: participation(m, b),
-              unit: "%",
-            },
-            { label: "视野得分", a: a.vision, b: b.vision },
-            { label: "插眼", a: a.obs, b: b.obs },
-            { label: "排眼", a: a.wardsKilled, b: b.wardsKilled },
-            { label: "真眼购买", a: a.controlWards, b: b.controlWards },
-          ]
-        : [
-            { label: "击杀", a: a.kills, b: b.kills },
-            { label: "助攻", a: a.assists, b: b.assists },
-            { label: "分均经济", a: a.gpm, b: b.gpm },
-            {
-              label: "分均补刀",
-              a: a.lastHits / ((a.playedDuration ?? m.duration) / 60),
-              b: b.lastHits / ((b.playedDuration ?? m.duration) / 60),
-              unit: " CS",
-            },
-            {
-              label: "分均伤害",
-              a: a.damage / ((a.playedDuration ?? m.duration) / 60),
-              b: b.damage / ((b.playedDuration ?? m.duration) / 60),
-            },
-            {
-              label: "参团率",
-              a: participation(m, a),
-              b: participation(m, b),
-              unit: "%",
-            },
-          ]
-      : isSupport(m, position)
-        ? [
-            { label: "助攻", a: a.assists, b: b.assists },
-            {
-              label: "参战率",
-              a: participation(m, a),
-              b: participation(m, b),
-              unit: "%",
-            },
-            { label: "观察守卫", a: a.obs, b: b.obs },
-            { label: "岗哨守卫", a: a.sentries, b: b.sentries },
-            { label: "眩晕时长", a: a.stuns, b: b.stuns, unit: "s" },
-            { label: "英雄治疗", a: a.healing, b: b.healing },
-          ]
-        : [
-            { label: "击杀", a: a.kills, b: b.kills },
-            { label: "助攻", a: a.assists, b: b.assists },
-            { label: "分均经济", a: a.gpm, b: b.gpm },
-            { label: "分均经验", a: a.xpm, b: b.xpm },
-            {
-              label: "分均伤害",
-              a: a.damage / ((a.playedDuration ?? m.duration) / 60),
-              b: b.damage / ((b.playedDuration ?? m.duration) / 60),
-            },
-            { label: "建筑伤害", a: a.tower, b: b.tower },
-          ];
+    m.game === "cs2"
+      ? [
+          { label: "击杀", a: a.kills, b: b.kills },
+          { label: "ADR", a: a.cs?.adr, b: b.cs?.adr },
+          { label: "KAST", a: a.cs?.kast, b: b.cs?.kast, unit: "%" },
+          {
+            label: "爆头率",
+            a: a.cs?.headshotPercent,
+            b: b.cs?.headshotPercent,
+            unit: "%",
+          },
+          { label: "首杀", a: a.cs?.openingKills, b: b.cs?.openingKills },
+          { label: "道具伤害", a: a.cs?.utilityDamage, b: b.cs?.utilityDamage },
+        ]
+      : m.game === "lol"
+        ? isSupport(m, position)
+          ? [
+              { label: "助攻", a: a.assists, b: b.assists },
+              {
+                label: "参团率",
+                a: participation(m, a),
+                b: participation(m, b),
+                unit: "%",
+              },
+              { label: "视野得分", a: a.vision, b: b.vision },
+              { label: "插眼", a: a.obs, b: b.obs },
+              { label: "排眼", a: a.wardsKilled, b: b.wardsKilled },
+              { label: "真眼购买", a: a.controlWards, b: b.controlWards },
+            ]
+          : [
+              { label: "击杀", a: a.kills, b: b.kills },
+              { label: "助攻", a: a.assists, b: b.assists },
+              { label: "分均经济", a: a.gpm, b: b.gpm },
+              {
+                label: "分均补刀",
+                a:
+                  a.lastHits === undefined
+                    ? undefined
+                    : a.lastHits / ((a.playedDuration ?? m.duration) / 60),
+                b:
+                  b.lastHits === undefined
+                    ? undefined
+                    : b.lastHits / ((b.playedDuration ?? m.duration) / 60),
+                unit: " CS",
+              },
+              {
+                label: "分均伤害",
+                a: a.damage / ((a.playedDuration ?? m.duration) / 60),
+                b: b.damage / ((b.playedDuration ?? m.duration) / 60),
+              },
+              {
+                label: "参团率",
+                a: participation(m, a),
+                b: participation(m, b),
+                unit: "%",
+              },
+            ]
+        : isSupport(m, position)
+          ? [
+              { label: "助攻", a: a.assists, b: b.assists },
+              {
+                label: "参战率",
+                a: participation(m, a),
+                b: participation(m, b),
+                unit: "%",
+              },
+              { label: "观察守卫", a: a.obs, b: b.obs },
+              { label: "岗哨守卫", a: a.sentries, b: b.sentries },
+              { label: "眩晕时长", a: a.stuns, b: b.stuns, unit: "s" },
+              { label: "英雄治疗", a: a.healing, b: b.healing },
+            ]
+          : [
+              { label: "击杀", a: a.kills, b: b.kills },
+              { label: "助攻", a: a.assists, b: b.assists },
+              { label: "分均经济", a: a.gpm, b: b.gpm },
+              { label: "分均经验", a: a.xpm, b: b.xpm },
+              {
+                label: "分均伤害",
+                a: a.damage / ((a.playedDuration ?? m.duration) / 60),
+                b: b.damage / ((b.playedDuration ?? m.duration) / 60),
+              },
+              { label: "建筑伤害", a: a.tower, b: b.tower },
+            ];
   return axes.map((x) => ({
     ...x,
     ar:
@@ -705,10 +861,17 @@ export function previewProps(
   const groups = comparisons(match, settings);
   const base = [7, 10, groups.length > 1 ? groups.length * 18 : 24, 10, 7];
   const speed = { snappy: 0.82, standard: 1, relaxed: 1.2 }[settings.pace];
-  const segments = settings.scripts.map((text, i) => ({
-    text,
-    frames: Math.ceil(Math.max(base[i], text.length / 5.5 + 1) * speed * FPS),
-  }));
+  // Keep script slots stable for existing projects; CS has no resource scene.
+  const segments = settings.scripts.map((text, i) =>
+    match.game === "cs2" && i === 1
+      ? { text: "", frames: 0 }
+      : {
+          text,
+          frames: Math.ceil(
+            Math.max(base[i], text.length / 5.5 + 1) * speed * FPS,
+          ),
+        },
+  );
   const captionSegments = segments.flatMap((segment, i) => {
     if (
       i !== 2 ||

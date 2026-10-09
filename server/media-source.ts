@@ -20,7 +20,7 @@ import {
 } from "../src/media";
 import { LogoCatalog, logoCatalog } from "./logo-catalog";
 
-export const mediaGameSchema = z.enum(["dota2", "lol"]);
+export const mediaGameSchema = z.enum(["dota2", "lol", "cs2"]);
 export const mediaSlotSchema = z.enum(["logo", "portrait", "artwork"]);
 const nameSchema = z
   .string()
@@ -41,6 +41,24 @@ const imagesSchema = z.object({
 const registrySchema = z.object({
   version: z.literal(1),
   heroes: z.record(imagesSchema),
+  players: z
+    .record(
+      z.object({
+        game: mediaGameSchema,
+        name: z.string(),
+        aliases: z.array(z.string()),
+        images: imagesSchema,
+        photoSource: z
+          .object({
+            name: z.string(),
+            provider: z.string(),
+            pageUrl: z.string(),
+            imageUrl: z.string(),
+          })
+          .optional(),
+      }),
+    )
+    .default({}),
   teams: z.record(
     z.object({
       game: mediaGameSchema,
@@ -55,8 +73,37 @@ const registrySchema = z.object({
 });
 type Registry = z.infer<typeof registrySchema>;
 type TeamSeed = { game: Game; name: string; aliases: string[]; logo?: string };
-type TeamSummary = { radiant: string; dire: string };
-const emptyRegistry = (): Registry => ({ version: 1, heroes: {}, teams: {} });
+type PlayerSeed = {
+  game: Game;
+  playerId: string;
+  name: string;
+  artwork: string;
+  source: NonNullable<MediaItem["photoSource"]>;
+};
+export type TeamSummary = {
+  radiant: string;
+  dire: string;
+  players?: {
+    playerId?: string;
+    steamId?: string;
+    name: string;
+    team?: string;
+  }[];
+};
+const emptyRegistry = (): Registry => ({
+  version: 1,
+  heroes: {},
+  players: {},
+  teams: {},
+});
+export const playerMediaId = (
+  game: Game,
+  player: { playerId?: string; steamId?: string },
+) => {
+  const identity = player.playerId || player.steamId;
+  if (!identity) return undefined;
+  return `${game}-player-${/^\d+$/.test(identity) ? identity : createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
+};
 const teamId = (game: Game, name: string) =>
   `${game}-team-${createHash("sha256").update(mediaKey(name)).digest("hex").slice(0, 24)}`;
 const exists = async (file: string) => {
@@ -107,6 +154,19 @@ export class MediaLibrary {
       return JSON.parse(
         await readFile(
           path.join(this.root, "data/fixtures/team-logos.json"),
+          "utf8",
+        ),
+      );
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw e;
+    }
+  }
+  private async playerSeeds(): Promise<PlayerSeed[]> {
+    try {
+      return JSON.parse(
+        await readFile(
+          path.join(this.root, "data/fixtures/player-photos.json"),
           "utf8",
         ),
       );
@@ -173,11 +233,25 @@ export class MediaLibrary {
       const defaults = automaticLogo
         ? { logo: `/api/logo-catalog/image/${automaticLogo.sha}` }
         : t.defaults;
+      const images = { ...defaults, ...t.images };
+      const hasCandidates = catalog?.logos.some(
+        (logo) =>
+          logo.game === game &&
+          [t.name, ...t.aliases].some(
+            (name) =>
+              name.trim().toLowerCase() === logo.name.trim().toLowerCase(),
+          ),
+      );
       return {
         ...t,
         defaults,
         automaticLogo,
-        images: { ...defaults, ...t.images },
+        images,
+        logoReview: images.logo
+          ? undefined
+          : hasCandidates
+            ? ("ambiguous" as const)
+            : ("missing" as const),
       };
     });
   }
@@ -185,44 +259,107 @@ export class MediaLibrary {
     await this.queue;
     const registry = await this.read();
     const heroes: MediaItem[] = [];
-    const file = game === "lol" ? "lol/champions.json" : "heroes.json";
-    const catalog = JSON.parse(
-      await readFile(path.join(this.root, "data/fixtures", file), "utf8"),
-    );
-    for (const hero of Object.values(
-      game === "lol" ? catalog.data : catalog,
-    ) as any[]) {
-      const heroId = Number(game === "lol" ? hero.key : hero.id);
-      const id = `${game}-hero-${heroId}`;
-      const portrait =
-        game === "lol"
-          ? `/assets/lol/${hero.id}.png`
-          : `/assets/heroes/${heroId}.png`;
-      const artwork =
-        game === "lol"
-          ? `/assets/lol/${hero.id}.jpg`
-          : `/assets/renders/${heroId}.png`;
-      const defaults: MediaItem["defaults"] = {};
-      if (await exists(path.join(this.root, "public", portrait)))
-        defaults.portrait = portrait;
-      if (await exists(path.join(this.root, "public", artwork)))
-        defaults.artwork = artwork;
-      const overrides = registry.heroes[id] || {};
-      heroes.push({
+    const players = new Map<string, MediaItem>();
+    for (const seed of await this.playerSeeds()) {
+      if (seed.game !== game) continue;
+      const id = playerMediaId(game, seed)!;
+      players.set(id, {
         id,
-        kind: "hero",
         game,
-        heroId,
-        name: game === "lol" ? hero.name : hero.localized_name,
-        aliases: [hero.name, hero.id?.toString()].filter(Boolean),
-        defaults,
-        images: { ...defaults, ...overrides },
-        overrides: Object.keys(overrides) as MediaSlot[],
+        kind: "player",
+        name: seed.name,
+        aliases: [seed.playerId],
+        images: { artwork: seed.artwork },
+        defaults: { artwork: seed.artwork },
+        overrides: [],
+        photoSource: seed.source,
       });
     }
-    return [...(await this.teams(game, registry, summaries)), ...heroes].sort(
-      (a, b) => a.name.localeCompare(b.name),
-    );
+    for (const [id, entry] of Object.entries(registry.players)) {
+      if (entry.game !== game) continue;
+      players.set(id, {
+        ...entry,
+        id,
+        kind: "player",
+        images: { ...players.get(id)?.defaults, ...entry.images },
+        defaults: players.get(id)?.defaults || {},
+        photoSource:
+          entry.photoSource ||
+          (!entry.images.artwork ? players.get(id)?.photoSource : undefined),
+        overrides: Object.keys(entry.images) as MediaSlot[],
+      });
+    }
+    for (const player of summaries.flatMap((m) => m.players || [])) {
+      const id = playerMediaId(game, player);
+      if (!id) continue;
+      const previous = players.get(id);
+      const images =
+        registry.players[id]?.images ||
+        (game === "cs2" ? registry.heroes[id] : undefined) ||
+        {};
+      players.set(id, {
+        id,
+        kind: "player",
+        game,
+        name: player.name,
+        aliases: [
+          ...new Set(
+            [
+              ...(previous?.aliases || []),
+              player.playerId || player.steamId || "",
+              player.team || "",
+              previous?.name || "",
+            ].filter(Boolean),
+          ),
+        ],
+        images: { ...previous?.defaults, ...images },
+        defaults: previous?.defaults || {},
+        photoSource: registry.players[id]?.photoSource || previous?.photoSource,
+        overrides: Object.keys(images) as MediaSlot[],
+      });
+    }
+    if (game !== "cs2") {
+      const file = game === "lol" ? "lol/champions.json" : "heroes.json";
+      const catalog = JSON.parse(
+        await readFile(path.join(this.root, "data/fixtures", file), "utf8"),
+      );
+      for (const hero of Object.values(
+        game === "lol" ? catalog.data : catalog,
+      ) as any[]) {
+        const heroId = Number(game === "lol" ? hero.key : hero.id);
+        const id = `${game}-hero-${heroId}`;
+        const portrait =
+          game === "lol"
+            ? `/assets/lol/${hero.id}.png`
+            : `/assets/heroes/${heroId}.png`;
+        const artwork =
+          game === "lol"
+            ? `/assets/lol/${hero.id}.jpg`
+            : `/assets/renders/${heroId}.png`;
+        const defaults: MediaItem["defaults"] = {};
+        if (await exists(path.join(this.root, "public", portrait)))
+          defaults.portrait = portrait;
+        if (await exists(path.join(this.root, "public", artwork)))
+          defaults.artwork = artwork;
+        const overrides = registry.heroes[id] || {};
+        heroes.push({
+          id,
+          kind: "hero",
+          game,
+          heroId,
+          name: game === "lol" ? hero.name : hero.localized_name,
+          aliases: [hero.name, hero.id?.toString()].filter(Boolean),
+          defaults,
+          images: { ...defaults, ...overrides },
+          overrides: Object.keys(overrides) as MediaSlot[],
+        });
+      }
+    }
+    return [
+      ...(await this.teams(game, registry, summaries)),
+      ...heroes,
+      ...players.values(),
+    ].sort((a, b) => a.name.localeCompare(b.name));
   }
   async saveTeam(
     game: Game,
@@ -273,6 +410,7 @@ export class MediaLibrary {
     content: Buffer | null,
     summaries: TeamSummary[] = [],
     logoSource?: LogoSource,
+    photoSource?: MediaItem["photoSource"],
   ) {
     const items = await this.list(game, summaries);
     const item = items.find((entry) => entry.id === id);
@@ -311,19 +449,30 @@ export class MediaLibrary {
     }
     return this.mutate(async (registry) => {
       const entry =
-        item.kind === "hero"
-          ? (registry.heroes[id] ||= {})
-          : (registry.teams[id] ||= {
+        item.kind === "player"
+          ? (registry.players[id] ||= {
               game,
               name: item.name,
               aliases: item.aliases,
-              images: {},
-            }).images;
+              images: { ...(game === "cs2" ? registry.heroes[id] : {}) },
+            }).images
+          : item.kind === "hero"
+            ? (registry.heroes[id] ||= {})
+            : (registry.teams[id] ||= {
+                game,
+                name: item.name,
+                aliases: item.aliases,
+                images: {},
+              }).images;
       if (src) entry[slot] = src;
       else delete entry[slot];
       if (item.kind === "team") {
         if (src && logoSource) registry.teams[id].logoSource = logoSource;
         else delete registry.teams[id].logoSource;
+      }
+      if (item.kind === "player" && slot === "artwork") {
+        if (src && photoSource) registry.players[id].photoSource = photoSource;
+        else delete registry.players[id].photoSource;
       }
       return { src: src || item.defaults[slot] || null };
     });
@@ -346,6 +495,7 @@ export class MediaLibrary {
     const teams = await this.teams(game, registry, [
       { radiant: match.radiant, dire: match.dire },
     ]);
+    match.logoReview = [];
     for (const side of ["radiant", "dire"] as const) {
       const team = teams.find((t) =>
         [t.name, ...t.aliases].some(
@@ -353,6 +503,8 @@ export class MediaLibrary {
         ),
       );
       match[`${side}Logo`] = team?.images.logo;
+      if (team?.logoReview)
+        match.logoReview.push({ side, reason: team.logoReview });
       if (team?.automaticLogo && !team.overrides.includes("logo")) {
         try {
           match[`${side}Logo`] = await this.storePng(
@@ -363,8 +515,23 @@ export class MediaLibrary {
         }
       }
     }
+    const playerSeeds = await this.playerSeeds();
     for (const player of match.players) {
-      const images = registry.heroes[`${game}-hero-${player.heroId}`];
+      const id = playerMediaId(game, player);
+      const photos = id
+        ? registry.players[id]?.images ||
+          (game === "cs2" ? registry.heroes[id] : undefined)
+        : undefined;
+      player.playerImage = photos?.portrait;
+      player.playerArtwork =
+        photos?.artwork ||
+        playerSeeds.find(
+          (seed) => seed.game === game && seed.playerId === player.playerId,
+        )?.artwork;
+      const images =
+        game === "cs2"
+          ? undefined
+          : registry.heroes[`${game}-hero-${player.heroId}`];
       if (images?.portrait) player.image = images.portrait;
       if (images?.artwork) player.artwork = images.artwork;
     }
@@ -385,6 +552,16 @@ export async function listDotaTeams(): Promise<TeamSummary[]> {
         summaries.push({
           radiant: raw.radiant_team.name,
           dire: raw.dire_team.name,
+          players: (raw.players || []).map((p: any) => ({
+            playerId:
+              Number.isSafeInteger(p.account_id) && p.account_id > 0
+                ? String(p.account_id)
+                : `match:${raw.match_id}:${p.player_slot}`,
+            name:
+              p.name || p.personaname || `选手 ${(p.player_slot % 128) + 1}`,
+            team:
+              p.player_slot < 128 ? raw.radiant_team.name : raw.dire_team.name,
+          })),
         });
     }
   }

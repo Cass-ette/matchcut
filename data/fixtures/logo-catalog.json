@@ -12474,6 +12474,162 @@
       "name": "zylant",
       "path": "league-of-legends/zylant/zylant-logo.png",
       "sha": "3b4f9bce8a56d0d9b95874e43ea67a99e2a4ccd2"
+    },
+    {
+      "game": "cs2",
+      "name": "astralis",
+      "path": "cs/astralis/astralis-logo.png",
+      "sha": "69a268448b392e9ddad7298f05966841753d21c8"
+    },
+    {
+      "game": "cs2",
+      "name": "big",
+      "path": "cs/big/big-logo.png",
+      "sha": "2dd0d470548970be91f4aee5004bbb50eae62b0b"
+    },
+    {
+      "game": "cs2",
+      "name": "cloud9",
+      "path": "cs/cloud9/cloud9-logo.png",
+      "sha": "75c70f16970fc7afcd9663451cd598cefa772b01"
+    },
+    {
+      "game": "cs2",
+      "name": "complexity",
+      "path": "cs/complexity/complexity-logo.png",
+      "sha": "a77822ecee1718f448f2a0d8958034dd26b3484e"
+    },
+    {
+      "game": "cs2",
+      "name": "ence",
+      "path": "cs/ence/ence-logo.png",
+      "sha": "6b8e4bf4b70f1f501074a390ef4b743783c080b5"
+    },
+    {
+      "game": "cs2",
+      "name": "eternal fire",
+      "path": "cs/eternal-fire/eternal-fire-logo.png",
+      "sha": "f9f281d837c2aadc1608dd843c1b67c219027cb7"
+    },
+    {
+      "game": "cs2",
+      "name": "faze",
+      "path": "cs/faze/faze-logo.png",
+      "sha": "dd266144a76a123b0919a7f991c2c65ddd2d9d31"
+    },
+    {
+      "game": "cs2",
+      "name": "faze clan",
+      "path": "cs/faze-clan/faze-clan-logo.png",
+      "sha": "abba4bcfabb9b41f3d7cc03edbd2160b66071b7f"
+    },
+    {
+      "game": "cs2",
+      "name": "fnatic",
+      "path": "cs/fnatic/fnatic-logo.png",
+      "sha": "a38d13406e28433bfd7472bb84059ba3d4584b04"
+    },
+    {
+      "game": "cs2",
+      "name": "furia",
+      "path": "cs/furia/furia-logo.png",
+      "sha": "35dfe2fb724c67459b6393c5b8dd6003a155edae"
+    },
+    {
+      "game": "cs2",
+      "name": "g2",
+      "path": "cs/g2/g2-logo.png",
+      "sha": "b5054ea6a2894126b4e96ae6ae05285ad83e980f"
+    },
+    {
+      "game": "cs2",
+      "name": "g2 esports",
+      "path": "cs/g2-esports/g2-esports-logo.png",
+      "sha": "aea3bf15a36891a983fafb2e2259132a07b6e77c"
+    },
+    {
+      "game": "cs2",
+      "name": "heroic",
+      "path": "cs/heroic/heroic-logo.png",
+      "sha": "02f4a5a0ca8141da350374d2fea7d198ed165530"
+    },
+    {
+      "game": "cs2",
+      "name": "monte",
+      "path": "cs/monte/monte-logo.png",
+      "sha": "3f80c1436c2a7b72797a892a151f42bc3c10106f"
+    },
+    {
+      "game": "cs2",
+      "name": "mouz",
+      "path": "cs/mouz/mouz-logo.png",
+      "sha": "61ac98361b2e2d994f9ab6a2b4a4826894aa6077"
+    },
+    {
+      "game": "cs2",
+      "name": "mouz",
+      "path": "cs/mouz/mouz-nxt-logo.png",
+      "sha": "d44677419019b97dcad2027dfaa9bf684889cbdd"
+    },
+    {
+      "game": "cs2",
+      "name": "natus vincere",
+      "path": "cs/natus-vincere/natus-vincere-logo.png",
+      "sha": "5da28c075febd5efed722bdbbdf66dec11e36e68"
+    },
+    {
+      "game": "cs2",
+      "name": "navi",
+      "path": "cs/navi/navi-logo.png",
+      "sha": "40d4637f55d0e42db6dd0a3bf7489da2681e02b5"
+    },
+    {
+      "game": "cs2",
+      "name": "ninjas in pyjamas",
+      "path": "cs/ninjas-in-pyjamas/ninjas-in-pyjamas-logo.png",
+      "sha": "97757a5036f860b5ec8eadeb59fcf96681ff0263"
+    },
+    {
+      "game": "cs2",
+      "name": "og",
+      "path": "cs/og/og-logo.png",
+      "sha": "41144da6cf1174627c12e88073d907eb20e11f04"
+    },
+    {
+      "game": "cs2",
+      "name": "pain gaming",
+      "path": "cs/pain-gaming/pain-gaming-logo.png",
+      "sha": "861b66b69564407b0c81b983422d22379cae3b84"
+    },
+    {
+      "game": "cs2",
+      "name": "team liquid",
+      "path": "cs/team-liquid/team-liquid-logo.png",
+      "sha": "e860b3539a5174f11434780a476c13eae3168951"
+    },
+    {
+      "game": "cs2",
+      "name": "team spirit",
+      "path": "cs/team-spirit/team-spirit-logo.png",
+      "sha": "b4e03c73be6ba5a60e9497a6a29a95a01bf6f742"
+    },
+    {
+      "game": "cs2",
+      "name": "team vitality",
+      "path": "cs/team-vitality/team-vitality-logo.png",
+      "sha": "1d715ed5863839108755108cd95e04fc617965cc"
+    },
+    {
+      "game": "cs2",
+      "name": "virtus.pro",
+      "path": "cs/virtus.pro/virtus.pro-logo.png",
+      "sha": "26e6d76430773cc38a5451e64eaed0366da4c235"
+    },
+    {
+      "game": "cs2",
+      "name": "vitality",
+      "path": "cs/vitality/vitality-logo.png",
+      "sha": "1fae48eb8589b55410c96c729e5fa11d581507cf"
     }
   ]
 }

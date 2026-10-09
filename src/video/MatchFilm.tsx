@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   AbsoluteFill,
   Audio,
@@ -19,8 +19,12 @@ import {
   MatchData,
   PlayerData,
   sceneNames,
+  sceneSlots,
+  csMapIcon,
   isSupport,
   gameScope,
+  gameTitle,
+  rankedPlayers,
   VideoProps,
   Comparison,
   comparisons,
@@ -94,6 +98,7 @@ const fit = (text: string, max: number, base: number) =>
       ),
   );
 const asset = (path: string) => staticFile(path.replace(/^\//, ""));
+const PlayerVisualContext = createContext(false);
 const teamColor = (p: PlayerData, s: VideoProps["settings"]) =>
   p.side === "radiant" ? s.accent : s.secondary;
 function Portrait({
@@ -105,7 +110,9 @@ function Portrait({
   width?: number;
   height?: number;
 }) {
-  if (p.champions)
+  const photo = useContext(PlayerVisualContext);
+  const image = photo ? p.playerImage || p.playerArtwork : p.image;
+  if (!photo && p.champions)
     return (
       <div style={{ width, height, display: "flex", overflow: "hidden" }}>
         {p.champions.slice(0, 3).map((c) => (
@@ -121,22 +128,97 @@ function Portrait({
         ))}
       </div>
     );
+  if (!image)
+    return (
+      <div
+        style={{
+          width,
+          height,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#c4d0e415",
+          borderBottom: "2px solid #c4d0e450",
+          fontFamily: display,
+          fontSize: Math.min(30, height * 0.38),
+          fontWeight: 900,
+        }}
+      >
+        {teamInitials(p.name)}
+      </div>
+    );
   return (
-    <Img src={asset(p.image)} style={{ width, height, objectFit: "cover" }} />
+    <Img
+      data-player-photo={photo || undefined}
+      src={asset(image)}
+      style={{
+        width,
+        height,
+        objectFit: "cover",
+        objectPosition: photo ? "center 20%" : "center",
+      }}
+    />
   );
 }
 function HeroArt({ p, style }: { p: PlayerData; style?: React.CSSProperties }) {
+  const photo = useContext(PlayerVisualContext);
+  const image = photo ? p.playerImage : p.image;
+  const artwork = photo ? p.playerArtwork : p.artwork;
+  // Mask the image before the outer filter draws its glow. Applying both to
+  // the image clips the glow at the rectangular mask bounds.
+  const { maskImage, ...frameStyle } = style || {};
   return (
-    <Img
-      data-hero-art
-      src={asset(p.artwork || p.image)}
+    <div
       style={{
         width: 700,
         height: 660,
-        objectFit: p.artwork ? "contain" : "cover",
-        ...style,
+        overflow: "visible",
+        ...frameStyle,
       }}
-    />
+    >
+      {image || artwork ? (
+        <Img
+          data-hero-art
+          data-player-photo={photo || undefined}
+          src={asset(artwork || image!)}
+          style={{
+            display: "block",
+            width: "100%",
+            // Keep a photo's mask on its actual bottom edge, including square
+            // headshots that do not fill the taller artwork frame.
+            height: photo ? "auto" : "100%",
+            maxHeight: "100%",
+            objectFit: artwork || photo ? "contain" : "cover",
+            objectPosition: photo ? "center top" : "center",
+            maskImage,
+          }}
+        />
+      ) : (
+        <div
+          data-hero-art
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            maskImage,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: display,
+              fontSize: 148,
+              fontWeight: 900,
+              color: "#e9d9b5",
+              textShadow: "0 0 60px #f6c45344",
+            }}
+          >
+            {teamInitials(p.name)}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 function Tag({
@@ -444,7 +526,7 @@ function Intro(props: Ctx) {
         }}
       >
         <Tag color={p.dim}>
-          {m.game === "lol" ? "LEAGUE OF LEGENDS" : "DOTA 2"} · POST MATCH
+          {gameTitle(m)} · POST MATCH
           {m.series
             ? " · SERIES RECAP"
             : m.game === "lol" && m.gameNumber
@@ -512,7 +594,7 @@ function Intro(props: Ctx) {
               >
                 {m.series
                   ? `系列赛比分 · ${m.series.games.length} 局`
-                  : `击杀 · ${matchDuration(m.duration)}`}
+                  : `${m.cs ? "回合" : "击杀"} · ${matchDuration(m.duration)}`}
               </div>
             </div>
           ) : (
@@ -561,7 +643,7 @@ function Intro(props: Ctx) {
                     )}
                   </div>
                   <Tag color={color}>
-                    {m.series
+                    {m.series || m.cs
                       ? "TEAM"
                       : m.game === "lol"
                         ? side === "radiant"
@@ -634,15 +716,19 @@ function Intro(props: Ctx) {
                         "translateY(" + (1 - enter(f, 8 + i * 3)) * 20 + "px)",
                     }}
                   >
-                    <Img
-                      src={asset(player.image)}
-                      style={{
-                        width: "100%",
-                        height: 80,
-                        objectFit: "cover",
-                        borderBottom: "3px solid " + teamColor(player, s),
-                      }}
-                    />
+                    {m.cs || s.playerVisual === "photo" ? (
+                      <Portrait p={player} width={142} height={80} />
+                    ) : (
+                      <Img
+                        src={asset(player.image)}
+                        style={{
+                          width: "100%",
+                          height: 80,
+                          objectFit: "cover",
+                          borderBottom: "3px solid " + teamColor(player, s),
+                        }}
+                      />
+                    )}
                     <div
                       style={{
                         fontSize: 18,
@@ -676,6 +762,22 @@ function Intro(props: Ctx) {
         }}
       >
         <span>{m.league}</span>
+        {m.cs && csMapIcon(m.cs.map) && (
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginTop: -10,
+            }}
+          >
+            <Img
+              src={asset(csMapIcon(m.cs.map)!)}
+              style={{ width: 48, height: 48, objectFit: "contain" }}
+            />
+            {m.cs.map.toUpperCase()}
+          </span>
+        )}
         <span style={{ fontFamily: mono }}>{m.date.slice(0, 10)}</span>
       </div>
     </AbsoluteFill>
@@ -1270,14 +1372,18 @@ function RadarScene(props: Ctx) {
         }}
       >
         <Tag color={mode === 0 ? s.accent : mode === 1 ? s.secondary : p.ink}>
-          03 /{" "}
-          {comparison.position
-            ? m.game === "lol"
-              ? ["TOP", "JUNGLE", "MID", "BOT", "SUPPORT"][
-                  comparison.position - 1
-                ]
-              : "POSITION " + String(comparison.position).padStart(2, "0")
-            : "DAMAGE DUEL"}
+          {m.cs ? "02" : "03"} /{" "}
+          {comparison.rank
+            ? "K / D / A RANK " + comparison.rank
+            : comparison.position
+              ? m.cs
+                ? "ROLE DUEL"
+                : m.game === "lol"
+                  ? ["TOP", "JUNGLE", "MID", "BOT", "SUPPORT"][
+                      comparison.position - 1
+                    ]
+                  : "POSITION " + String(comparison.position).padStart(2, "0")
+              : "DAMAGE DUEL"}
         </Tag>
         <span style={{ fontSize: 24, color: p.ink }}>
           {comparison.label}
@@ -1577,13 +1683,16 @@ function Damage(props: Ctx) {
   const { match: m, settings: s } = props;
   const p = palettes[s.theme],
     frame = useCurrentFrame(),
-    players = sortedDamage(m).slice(0, 5),
+    players = rankedPlayers(m).slice(0, 5),
     leader = players[0],
     color = teamColor(leader, s);
   return (
     <AbsoluteFill>
-      <Title en="04 / DAMAGE LEADERS" props={props}>
-        伤害排行
+      <Title
+        en={m.cs ? "03 / FRAG LEADERS" : "04 / DAMAGE LEADERS"}
+        props={props}
+      >
+        {m.cs ? "击杀排行" : "伤害排行"}
       </Title>
       <HeroArt
         p={leader}
@@ -1601,7 +1710,9 @@ function Damage(props: Ctx) {
         data-damage-identity
         style={{ position: "absolute", top: 690, left: 85, width: 610 }}
       >
-        <Tag color={color}>{m.series ? "系列赛伤害第一" : "全场伤害第一"}</Tag>
+        <Tag color={color}>
+          {m.cs ? "全场击杀第一" : m.series ? "系列赛伤害第一" : "全场伤害第一"}
+        </Tag>
         <div
           style={{
             ...digits,
@@ -1612,10 +1723,12 @@ function Damage(props: Ctx) {
           {leader.name}
         </div>
         <div style={{ ...digits, fontSize: 76, color }}>
-          {num(leader.damage)}
+          {m.cs
+            ? `${leader.kills} / ${leader.deaths} / ${leader.assists}`
+            : num(leader.damage)}
         </div>
         <div style={{ fontSize: 20, color: p.dim, marginTop: 16 }}>
-          {m[leader.side]} · {leader.hero}
+          {m[leader.side]} · {m.cs ? "K / D / A" : leader.hero}
         </div>
       </div>
       <div style={{ position: "absolute", left: 820, right: 84, top: 270 }}>
@@ -1629,8 +1742,16 @@ function Damage(props: Ctx) {
             letterSpacing: 2,
           }}
         >
-          <span>TOP 5 / {m.series ? "总伤害" : "英雄伤害"}</span>
-          <span>{m.game === "lol" ? "CHAMPION DAMAGE" : "HERO DAMAGE"}</span>
+          <span>
+            TOP 5 / {m.cs ? "击杀" : m.series ? "总伤害" : "英雄伤害"}
+          </span>
+          <span>
+            {m.cs
+              ? "K / D / A"
+              : m.game === "lol"
+                ? "CHAMPION DAMAGE"
+                : "HERO DAMAGE"}
+          </span>
         </div>
         {players.map((pl, i) => {
           const progress = enter(frame, 10 + i * 8, 46),
@@ -1676,7 +1797,9 @@ function Damage(props: Ctx) {
                     {pl.name}
                   </span>
                   <span style={{ ...digits, fontSize: 30, color: c }}>
-                    {num(pl.damage * progress)}
+                    {m.cs
+                      ? `${num(pl.kills * progress)} / ${pl.deaths} / ${pl.assists}`
+                      : num(pl.damage * progress)}
                   </span>
                 </div>
                 <div style={{ height: 8, background: p.line }}>
@@ -1684,9 +1807,13 @@ function Damage(props: Ctx) {
                     style={{
                       height: "100%",
                       width:
-                        (leader.damage
-                          ? (pl.damage / leader.damage) * progress * 100
-                          : 0) + "%",
+                        (m.cs
+                          ? leader.kills
+                            ? (pl.kills / leader.kills) * progress * 100
+                            : 0
+                          : leader.damage
+                            ? (pl.damage / leader.damage) * progress * 100
+                            : 0) + "%",
                       background: c,
                       boxShadow: "0 0 18px " + c + "44",
                     }}
@@ -1705,7 +1832,11 @@ function Outro(props: Ctx) {
   const p = palettes[s.theme],
     f = facts(m),
     focus = getFocus(m),
-    winnerPlayer = m.winner ? focus[m.winner === "radiant" ? 0 : 1] : f.top,
+    winnerPlayer = m.cs
+      ? rankedPlayers(m).find((p) => p.side === m.winner)!
+      : m.winner
+        ? focus[m.winner === "radiant" ? 0 : 1]
+        : f.top,
     color = teamColor(winnerPlayer, s);
   const frame = useCurrentFrame();
   return (
@@ -1764,10 +1895,13 @@ function Outro(props: Ctx) {
                 : matchDuration(m.duration),
             ],
             [
-              m.series ? "总击杀" : "击杀",
+              m.cs ? "回合比分" : m.series ? "总击杀" : "击杀",
               m.radiantScore + " : " + m.direScore,
             ],
-            ["最高伤害", compact(f.top.damage)],
+            [
+              m.cs ? "最多击杀" : "最高伤害",
+              m.cs ? String(f.top.kills) : compact(f.top.damage),
+            ],
           ].map(([label, value]) => (
             <div key={label}>
               <Tag color={p.dim}>{label}</Tag>
@@ -1857,144 +1991,152 @@ export function MatchFilm(props: VideoProps) {
   );
   const caption = props.captions.find((c) => frame >= c.start && frame < c.end);
   return (
-    <AbsoluteFill
-      data-match-film
-      style={{ fontFamily: font, color: p.ink, overflow: "hidden" }}
+    <PlayerVisualContext.Provider
+      value={m.game === "cs2" || s.playerVisual === "photo"}
     >
-      <Background {...props} />
-      {props.bgmTrack && s.bgm && (
-        <Audio
-          src={asset(props.bgmTrack.src)}
-          loop={s.bgm.loop}
-          loopVolumeCurveBehavior="extend"
-          volume={(audioFrame) =>
-            bgmVolume(audioFrame, total, props.bgmTrack!.duration, s.bgm!)
-          }
-        />
-      )}
-      {segments.map((seg, i) => (
-        <Sequence key={i} from={starts[i]} durationInFrames={seg.frames}>
-          <FilmScene {...props} index={i} />
-        </Sequence>
-      ))}
-      <div
-        style={{
-          position: "absolute",
-          left: 84,
-          right: 84,
-          top: 35,
-          height: 50,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          borderBottom: "1px solid " + p.line,
-          paddingBottom: 20,
-        }}
+      <AbsoluteFill
+        data-match-film
+        style={{ fontFamily: font, color: p.ink, overflow: "hidden" }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span
-            style={{
-              width: 11,
-              height: 26,
-              background: s.accent,
-              transform: "skewX(-15deg)",
-            }}
+        <Background {...props} />
+        {props.bgmTrack && s.bgm && (
+          <Audio
+            src={asset(props.bgmTrack.src)}
+            loop={s.bgm.loop}
+            loopVolumeCurveBehavior="extend"
+            volume={(audioFrame) =>
+              bgmVolume(audioFrame, total, props.bgmTrack!.duration, s.bgm!)
+            }
           />
-          <span style={{ fontWeight: 900, fontSize: 23, letterSpacing: 2 }}>
-            {s.brand}
-          </span>
-          <span
-            style={{
-              color: p.dim,
-              fontFamily: mono,
-              fontSize: 17,
-              marginLeft: 17,
-            }}
-          >
-            {m.game === "lol" ? "LEAGUE OF LEGENDS" : "DOTA 2"}
-          </span>
-        </div>
-        <span style={{ fontSize: fit(m.league, 640, 20), color: p.dim }}>
-          {m.league}
-          <span style={{ marginLeft: 26, color: s.accent }}>
-            {m.series ? "系列赛" : gameScope(m)}
-          </span>
-        </span>
-      </div>
-      {s.captions && caption && (
+        )}
+        {segments.map(
+          (seg, i) =>
+            seg.frames > 0 && (
+              <Sequence key={i} from={starts[i]} durationInFrames={seg.frames}>
+                <FilmScene {...props} index={i} />
+              </Sequence>
+            ),
+        )}
         <div
-          data-film-caption
           style={{
             position: "absolute",
-            bottom: 88,
-            left: 100,
-            right: 100,
-            textAlign: "center",
-            fontSize: 28,
-            fontWeight: 600,
-            lineHeight: 1.4,
+            left: 84,
+            right: 84,
+            top: 35,
+            height: 50,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom: "1px solid " + p.line,
+            paddingBottom: 20,
           }}
         >
-          <span
-            style={{
-              padding: "8px 25px",
-              background: p.bg + "ed",
-              borderLeft: "3px solid " + s.accent,
-            }}
-          >
-            {caption.text}
-          </span>
-        </div>
-      )}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 31,
-          left: 84,
-          right: 84,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          color: p.dim,
-          fontSize: 17,
-          letterSpacing: 1,
-        }}
-      >
-        <span>
-          {gameScope(m)} · {m.date.slice(0, 10)}
-        </span>
-        <div style={{ display: "flex", gap: 25 }}>
-          {sceneNames(m).map((scene, i) => (
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <span
-              key={scene}
               style={{
-                color: i === index ? p.ink : p.dim,
-                opacity: i === index ? 1 : 0.55,
+                width: 11,
+                height: 26,
+                background: s.accent,
+                transform: "skewX(-15deg)",
+              }}
+            />
+            <span style={{ fontWeight: 900, fontSize: 23, letterSpacing: 2 }}>
+              {s.brand}
+            </span>
+            <span
+              style={{
+                color: p.dim,
+                fontFamily: mono,
+                fontSize: 17,
+                marginLeft: 17,
               }}
             >
+              {gameTitle(m)}
+            </span>
+          </div>
+          <span style={{ fontSize: fit(m.league, 640, 20), color: p.dim }}>
+            {m.league}
+            <span style={{ marginLeft: 26, color: s.accent }}>
+              {m.series ? "系列赛" : gameScope(m)}
+            </span>
+          </span>
+        </div>
+        {s.captions && caption && (
+          <div
+            data-film-caption
+            style={{
+              position: "absolute",
+              bottom: 88,
+              left: 100,
+              right: 100,
+              textAlign: "center",
+              fontSize: 28,
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            <span
+              style={{
+                padding: "8px 25px",
+                background: p.bg + "ed",
+                borderLeft: "3px solid " + s.accent,
+              }}
+            >
+              {caption.text}
+            </span>
+          </div>
+        )}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 31,
+            left: 84,
+            right: 84,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            color: p.dim,
+            fontSize: 17,
+            letterSpacing: 1,
+          }}
+        >
+          <span>
+            {gameScope(m)}
+            {m.date ? " · " + m.date.slice(0, 10) : ""}
+          </span>
+          <div style={{ display: "flex", gap: 25 }}>
+            {sceneNames(m).map((scene, i) => (
               <span
+                key={scene}
                 style={{
-                  color: i === index ? s.accent : undefined,
-                  fontFamily: mono,
-                  marginRight: 8,
+                  color: sceneSlots(m)[i] === index ? p.ink : p.dim,
+                  opacity: sceneSlots(m)[i] === index ? 1 : 0.55,
                 }}
               >
-                0{i + 1}
+                <span
+                  style={{
+                    color: sceneSlots(m)[i] === index ? s.accent : undefined,
+                    fontFamily: mono,
+                    marginRight: 8,
+                  }}
+                >
+                  0{i + 1}
+                </span>
+                {scene}
               </span>
-              {scene}
-            </span>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          height: 3,
-          width: ((frame + 1) / total) * 100 + "%",
-          background: s.accent,
-        }}
-      />
-    </AbsoluteFill>
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            height: 3,
+            width: ((frame + 1) / total) * 100 + "%",
+            background: s.accent,
+          }}
+        />
+      </AbsoluteFill>
+    </PlayerVisualContext.Provider>
   );
 }

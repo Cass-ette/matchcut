@@ -18,8 +18,12 @@ import {
   normalizeLol,
 } from "../src/lol";
 import { MatchData, matchIdSchema } from "../src/domain";
-import { LolSummary, groupLolSeries, summarizeLolSeries } from "../src/series";
-import { mediaLibrary } from "./media-source";
+import {
+  LolMediaSummary,
+  groupLolSeries,
+  summarizeLolSeries,
+} from "../src/series";
+import { mediaLibrary, type TeamSummary } from "./media-source";
 
 const root = process.cwd();
 const fixtures = path.join(root, "data/fixtures/lol");
@@ -43,7 +47,20 @@ const summary = ({
   radiant,
   dire,
   gameNumber,
-}: MatchData): LolSummary => ({ id, league, date, radiant, dire, gameNumber });
+  players,
+}: MatchData): LolMediaSummary => ({
+  id,
+  league,
+  date,
+  radiant,
+  dire,
+  gameNumber,
+  players: players.map((p) => ({
+    playerId: p.playerId,
+    name: p.name,
+    team: p.side === "radiant" ? radiant : dire,
+  })),
+});
 const json = async (file: string) => JSON.parse(await readFile(file, "utf8"));
 const exists = async (file: string) => {
   try {
@@ -54,7 +71,9 @@ const exists = async (file: string) => {
   }
 };
 export async function listLolMatches() {
-  const items: LolSummary[] = (await exists(path.join(cache, "index.json")))
+  const items: LolMediaSummary[] = (await exists(
+    path.join(cache, "index.json"),
+  ))
     ? await json(path.join(cache, "index.json"))
     : [];
   for (const filename of (await readdir(fixtures)).filter((name) =>
@@ -65,6 +84,33 @@ export async function listLolMatches() {
     items.push(summary(normalizeLol(sample.rows, catalog, sample.fetchedAt)));
   }
   return items.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export async function listLolMedia(): Promise<TeamSummary[]> {
+  const result: TeamSummary[] = [];
+  for (const item of await listLolMatches()) {
+    if (item.players) {
+      result.push(item);
+      continue;
+    }
+    const file = path.join(cache, item.id + ".json");
+    const raw: Snapshot = await json(
+      (await exists(file))
+        ? file
+        : path.join(fixtures, item.id.slice(4) + ".json"),
+    );
+    const match = normalizeLol(raw.rows, catalog, raw.fetchedAt);
+    result.push({
+      radiant: match.radiant,
+      dire: match.dire,
+      players: match.players.map((p) => ({
+        playerId: p.playerId,
+        name: p.name,
+        team: match[p.side],
+      })),
+    });
+  }
+  return result;
 }
 
 const failedAssets = new Map<string, number>();
@@ -186,7 +232,7 @@ export async function importLolCsv(
       }),
     );
     const pending = new Map<string, OracleRow[]>(),
-      accepted = new Map<string, LolSummary>();
+      accepted = new Map<string, LolMediaSummary>();
     let skipped = 0,
       rowCount = 0;
     const examples: string[] = [];
@@ -245,9 +291,9 @@ export async function importLolCsv(
           (examples[0] || "每场需要十名选手和两行战队数据。"),
       );
     const indexFile = path.join(target, "index.json");
-    const index = new Map<string, LolSummary>(
+    const index = new Map<string, LolMediaSummary>(
       ((await exists(indexFile))
-        ? ((await json(indexFile)) as LolSummary[])
+        ? ((await json(indexFile)) as LolMediaSummary[])
         : []
       ).map((m) => [m.id, m]),
     );

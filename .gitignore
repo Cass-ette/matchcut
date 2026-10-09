@@ -11,6 +11,10 @@ data/preferences-lol.json
 /public/assets/bgm/
 .DS_Store
 *.log
+.env
+.env.*
+!.env.example
+*.dem
 # Downloaded artwork is a local cache; the bundled sample remains tracked.
 /public/assets/heroes/*.png
 /public/assets/renders/*.png
@@ -24,3 +28,5 @@ data/preferences-lol.json
 !/public/assets/renders/123.png
 !/public/assets/renders/105.png
 !/public/assets/renders/106.png
+
+data/preferences-cs2.json

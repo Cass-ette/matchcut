@@ -14,6 +14,7 @@ import { z } from "zod";
 import {
   DEFAULT_MATCH,
   DEFAULT_LOL_MATCH,
+  DEFAULT_CS_MATCH,
   matchIdSchema,
   defaultSettings,
   refreshSettings,
@@ -27,8 +28,15 @@ import {
 } from "./source";
 import { Job, runRender } from "./render";
 import {
+  csLibrary,
+  listCsMatches,
+  loadCsMatch,
+  MAX_DEMO_BYTES,
+} from "./cs-source";
+import {
   importLolCsv,
   listLolMatches,
+  listLolMedia,
   loadLolMatch,
   loadLolSeries,
 } from "./lol-source";
@@ -40,9 +48,32 @@ import {
   mediaSlotSchema,
 } from "./media-source";
 import { logoCatalog, logoRepositoryUrl, logoShaSchema } from "./logo-catalog";
+import {
+  fetchPhotoCandidate,
+  limitedFetch,
+  photoImageUrl,
+  photoPageUrl,
+  photoCandidateSchema,
+} from "./player-photos";
 
 const loadAnyMatch = (id: string) =>
-  id.startsWith("lol-") ? loadLolMatch(id) : loadMatch(id);
+  id.startsWith("cs2-")
+    ? loadCsMatch(id)
+    : id.startsWith("lol-")
+      ? loadLolMatch(id)
+      : loadMatch(id);
+const summariesFor = (game: string) =>
+  game === "cs2"
+    ? listCsMatches()
+    : game === "lol"
+      ? listLolMedia()
+      : listDotaTeams();
+const preferenceFile = (game: string) =>
+  game === "cs2"
+    ? "data/preferences-cs2.json"
+    : game === "lol"
+      ? "data/preferences-lol.json"
+      : "data/preferences.json";
 
 const root = process.cwd(),
   port = Number(process.env.PORT || 4317),
@@ -89,6 +120,42 @@ const wrap =
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, app: "matchcut", version: "0.1.0" }),
 );
+app.post(
+  "/api/player-photo/preview",
+  wrap(async (req, res) => {
+    res.json(
+      await fetchPhotoCandidate(z.string().max(500).parse(req.body.url)),
+    );
+  }),
+);
+app.post(
+  "/api/media/:id/photo-source",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.query.game);
+    const source = photoCandidateSchema.parse(req.body);
+    photoPageUrl(source.pageUrl);
+    const summaries = await summariesFor(game);
+    const item = (await mediaLibrary.list(game, summaries)).find(
+      (item) => item.id === req.params.id,
+    );
+    if (item?.kind !== "player") throw new Error("请选择选手。");
+    const bytes = await limitedFetch(
+      photoImageUrl(source.imageUrl),
+      12 * 1024 * 1024,
+    );
+    res.json(
+      await mediaLibrary.setImage(
+        game,
+        item.id,
+        "artwork",
+        bytes,
+        summaries,
+        undefined,
+        source,
+      ),
+    );
+  }),
+);
 app.get(
   "/api/logo-catalog",
   wrap(async (req, res) =>
@@ -112,9 +179,7 @@ app.post(
     const input = z
       .object({ sha: logoShaSchema, path: z.string().min(1).max(600) })
       .parse(req.body);
-    const summaries = await (game === "lol"
-      ? listLolMatches()
-      : listDotaTeams());
+    const summaries = await summariesFor(game);
     const id = String(req.params.id);
     if (
       !(await mediaLibrary.list(game, summaries)).some(
@@ -139,12 +204,7 @@ app.get(
   "/api/media",
   wrap(async (req, res) => {
     const game = mediaGameSchema.parse(req.query.game || "dota2");
-    res.json(
-      await mediaLibrary.list(
-        game,
-        await (game === "lol" ? listLolMatches() : listDotaTeams()),
-      ),
-    );
+    res.json(await mediaLibrary.list(game, await summariesFor(game)));
   }),
 );
 app.post(
@@ -156,7 +216,7 @@ app.post(
         game,
         req.body,
         undefined,
-        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+        await summariesFor(game),
       ),
     );
   }),
@@ -170,7 +230,7 @@ app.put(
         game,
         req.body,
         String(req.params.id),
-        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+        await summariesFor(game),
       ),
     );
   }),
@@ -187,7 +247,7 @@ app.put(
         String(req.params.id),
         mediaSlotSchema.parse(req.params.slot),
         req.body,
-        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+        await summariesFor(game),
       ),
     );
   }),
@@ -202,7 +262,7 @@ app.delete(
         String(req.params.id),
         mediaSlotSchema.parse(req.params.slot),
         null,
-        await (game === "lol" ? listLolMatches() : listDotaTeams()),
+        await summariesFor(game),
       ),
     );
   }),
@@ -210,27 +270,25 @@ app.delete(
 app.get(
   "/api/bootstrap",
   wrap(async (req, res) => {
-    const lol = req.query.game === "lol";
+    const game = mediaGameSchema.parse(req.query.game || "dota2");
+    const lol = game === "lol",
+      cs = game === "cs2";
     let saved = null;
     try {
       saved = JSON.parse(
-        await readFile(
-          path.join(
-            root,
-            lol ? "data/preferences-lol.json" : "data/preferences.json",
-          ),
-          "utf8",
-        ),
+        await readFile(path.join(root, preferenceFile(game)), "utf8"),
       );
     } catch {}
     const selected =
-      lol &&
+      (lol || cs) &&
       matchIdSchema.safeParse(saved?.matchId).success &&
-      saved.matchId.startsWith("lol-")
+      saved.matchId.startsWith(cs ? "cs2-" : "lol-")
         ? saved.matchId
-        : lol
-          ? DEFAULT_LOL_MATCH
-          : DEFAULT_MATCH;
+        : cs
+          ? DEFAULT_CS_MATCH
+          : lol
+            ? DEFAULT_LOL_MATCH
+            : DEFAULT_MATCH;
     const data = await (lol && saved?.reportMode === "series"
       ? loadLolSeries(selected)
       : loadAnyMatch(selected));
@@ -268,6 +326,30 @@ app.post(
     res.json(
       await importBgm(req.body, String(req.query.filename || "我的 BGM")),
     );
+  }),
+);
+app.get(
+  "/api/cs/matches",
+  wrap(async (_req, res) => res.json(await listCsMatches())),
+);
+app.get(
+  "/api/cs/source/:id",
+  wrap(async (req, res) =>
+    res.json(await csLibrary.snapshot(String(req.params.id))),
+  ),
+);
+app.post(
+  "/api/cs/import",
+  wrap(async (req, res) => {
+    if (!req.is("application/octet-stream")) {
+      res.status(400).json({ error: "请选择 .dem 文件。" });
+      return;
+    }
+    if (Number(req.headers["content-length"]) > MAX_DEMO_BYTES) {
+      res.status(413).json({ error: "Demo 超过 1 GB。" });
+      return;
+    }
+    res.json(await csLibrary.importDemo(req, String(req.query.filename || "")));
   }),
 );
 app.get(
@@ -369,9 +451,7 @@ app.put(
     await writeFile(
       path.join(
         root,
-        req.query.game === "lol"
-          ? "data/preferences-lol.json"
-          : "data/preferences.json",
+        preferenceFile(mediaGameSchema.parse(req.query.game || "dota2")),
       ),
       JSON.stringify(prefs, null, 2),
     );
@@ -417,9 +497,9 @@ app.post(
       });
       return;
     }
-    if (body.matchId.startsWith("lol-") && body.source === "latest") {
+    if (/^(lol|cs2)-/.test(body.matchId) && body.source === "latest") {
       res.status(400).json({
-        error: "英雄联盟暂未接通自动最新数据，请从已导入的比赛生成。",
+        error: "此游戏暂未接通自动最新数据，请从已导入的比赛生成。",
       });
       return;
     }
@@ -518,3 +598,5 @@ server.on("error", (e) => {
   console.error(e.message);
   process.exit(1);
 });
+
+server.requestTimeout = 15 * 60 * 1000;

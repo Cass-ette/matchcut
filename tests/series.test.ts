@@ -110,8 +110,8 @@ test("real BO5 aggregates teams across side swaps, uses wins as series score and
   );
   assert.ok(
     Math.abs(
-      mid[0].gpm -
-        chovy.reduce((n, p, i) => n + p.gpm * games[i].duration, 0) / 11106,
+      mid[0].gpm! -
+        chovy.reduce((n, p, i) => n + p.gpm! * games[i].duration, 0) / 11106,
     ) < 1e-8,
   );
   assert.equal(radar(report, mid, 3)[4].a, mid[0].damage / (11106 / 60));

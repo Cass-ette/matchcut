@@ -98,6 +98,10 @@ export function normalizeLol(
       return {
         slot: (row.side === "Blue" ? 0 : 128) + role - 1,
         name: required(row, "playername"),
+        playerId:
+          row.playerid?.trim() && row.playerid !== "NA"
+            ? row.playerid.trim()
+            : `match:${id}:${row.side}:${role}`,
         hero: champion,
         heroId: known ? Number(known.key) : 0,
         image: "/assets/lol/placeholder.svg", // server attaches verified cached assets

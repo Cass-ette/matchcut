@@ -6,10 +6,15 @@ import { z } from "zod";
 import type { CatalogLogo, LogoCatalogData } from "../src/media";
 
 const repo = "lootmarket/esport-team-logos";
-const folders = { "dota-2": "dota2", "league-of-legends": "lol" } as const;
+const folders = {
+  "dota-2": "dota2",
+  "league-of-legends": "lol",
+  cs: "cs2",
+  csgo: "cs2",
+} as const;
 export const logoShaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 const logoSchema = z.object({
-  game: z.enum(["dota2", "lol"]),
+  game: z.enum(["dota2", "lol", "cs2"]),
   name: z.string().min(1),
   path: z.string().refine((value) => {
     const pieces = value.split("/");

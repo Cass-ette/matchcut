@@ -234,7 +234,10 @@ export async function runRender(
           )
           .join("\n") +
         "\n\n" +
-        settings.scripts.join("\n\n") +
+        segments
+          .filter((segment) => segment.frames > 0)
+          .map((segment) => segment.text)
+          .join("\n\n") +
         "\n",
     );
     job.files = Object.fromEntries(

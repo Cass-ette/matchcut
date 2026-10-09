@@ -4,6 +4,9 @@ export type LolSummary = Pick<
   MatchData,
   "id" | "league" | "date" | "radiant" | "dire" | "gameNumber"
 >;
+export type LolMediaSummary = LolSummary & {
+  players?: { playerId?: string; name: string; team: string }[];
+};
 export type LolSeries = {
   id: string;
   league: string;
@@ -70,6 +73,8 @@ function totalPlayer(
   const picks = [...champions.values()].sort((a, b) => b.games - a.games);
   const main = picks[0].player;
   const positions = new Set(entries.map((e) => e.player.declaredPosition));
+  const identities = new Set(entries.map((e) => e.player.playerId));
+  const singlePlayer = identities.size === 1 && Boolean(main.playerId);
   const values = (key: keyof PlayerData) =>
     entries.map((e) => e.player[key] as number | undefined);
   return {
@@ -80,6 +85,9 @@ function totalPlayer(
     heroId: main.heroId,
     image: main.image,
     artwork: main.artwork,
+    playerId: singlePlayer ? main.playerId : undefined,
+    playerImage: singlePlayer ? main.playerImage : undefined,
+    playerArtwork: singlePlayer ? main.playerArtwork : undefined,
     champions: picks.map((p) => ({
       hero: p.player.hero,
       image: p.player.image,
@@ -100,7 +108,7 @@ function totalPlayer(
     damage: sum(values("damage"))!,
     lastHits: sum(values("lastHits"))!,
     gpm:
-      entries.reduce((n, e) => n + e.player.gpm * e.game.duration, 0) /
+      entries.reduce((n, e) => n + e.player.gpm! * e.game.duration, 0) /
       duration,
     obs: sum(values("obs")),
     wardsKilled: sum(values("wardsKilled")),
@@ -193,6 +201,7 @@ export function summarizeLolSeries(input: MatchData[]): ReportData {
     dire: first.dire,
     radiantLogo: first.radiantLogo,
     direLogo: first.direLogo,
+    logoReview: first.logoReview,
     duration: games.reduce((n, g) => n + g.duration, 0),
     radiantScore: score("radiant"),
     direScore: score("dire"),
