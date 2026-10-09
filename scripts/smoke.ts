@@ -6,6 +6,10 @@ import path from "node:path";
 import { browserPath } from "../server/render";
 import { comparisons } from "../src/domain";
 
+if (process.argv.includes("--layout")) {
+  await import("./layout-smoke");
+  process.exit(0);
+}
 if (process.argv.includes("--series")) {
   await import("./series-smoke");
   process.exit(0);

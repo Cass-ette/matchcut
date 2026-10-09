@@ -127,6 +127,7 @@ function Portrait({
 function HeroArt({ p, style }: { p: PlayerData; style?: React.CSSProperties }) {
   return (
     <Img
+      data-hero-art
       src={asset(p.artwork || p.image)}
       style={{
         width: 700,
@@ -1258,6 +1259,7 @@ function RadarScene(props: Ctx) {
   const support = isSupport(m, comparison.position);
   const player = focus[mode === 0 ? 0 : 1],
     color = teamColor(player, s);
+  const kda = `${player.kills} / ${player.deaths} / ${player.assists}`;
   const teamTotal = m.players
     .filter((x) => x.side === player.side)
     .reduce((sum, x) => sum + x.damage, 0);
@@ -1338,30 +1340,42 @@ function RadarScene(props: Ctx) {
             p={player}
             style={{
               position: "absolute",
-              left: 1080,
-              top: 206,
-              width: 750,
-              height: 615,
+              left: 1415,
+              top: 211,
+              width: 420,
+              height: 500,
               opacity: 0.94,
               filter:
                 s.effects === "arena"
                   ? "drop-shadow(0 0 25px " + color + "80)"
                   : undefined,
               transform: "translateX(" + (1 - enter(local, 0, 36)) * 65 + "px)",
-              maskImage: "linear-gradient(to bottom,#000 64%,transparent 100%)",
+              maskImage: "linear-gradient(to bottom,#000 88%,transparent 100%)",
             }}
           />
           <div
-            style={{ position: "absolute", left: 1105, right: 85, top: 217 }}
+            data-player-identity
+            style={{ position: "absolute", left: 1105, width: 280, top: 236 }}
           >
-            <Tag color={color}>
-              {m[player.side]} / {player.hero}
-            </Tag>
             <div
               style={{
+                color,
+                fontSize: fit(m[player.side], 280, 20),
+                fontWeight: 700,
+                lineHeight: 1.4,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {m[player.side]}
+            </div>
+            <div
+              data-player-name
+              style={{
                 ...digits,
-                fontSize: fit(player.name, 650, 105),
-                marginTop: 14,
+                fontSize: fit(player.name, 250, 64),
+                marginTop: 20,
+                lineHeight: 1.2,
+                overflowWrap: "anywhere",
                 textShadow:
                   s.effects === "arena"
                     ? "0 0 18px " + color + "aa, 0 0 60px " + color + "70"
@@ -1370,75 +1384,122 @@ function RadarScene(props: Ctx) {
             >
               {player.name}
             </div>
-          </div>
-          {player.champions && (
             <div
               style={{
-                position: "absolute",
-                left: 1105,
-                right: 85,
-                top: 420,
-                display: "flex",
-                gap: 12,
+                fontSize: 20,
+                lineHeight: 1.5,
+                color: p.dim,
+                marginTop: 18,
+                overflowWrap: "anywhere",
               }}
             >
-              {player.champions.map((c) => (
-                <div
-                  key={c.hero}
-                  style={{
-                    background: p.bg + "dd",
-                    padding: 8,
-                    textAlign: "center",
-                    minWidth: 0,
-                    flex: 1,
-                  }}
-                >
-                  <Img
-                    src={asset(c.image)}
-                    style={{ width: 62, height: 62, objectFit: "cover" }}
-                  />
-                  <div style={{ fontSize: 14, marginTop: 4 }}>
-                    {c.hero} ×{c.games}
-                  </div>
-                </div>
-              ))}
+              {player.hero}
             </div>
-          )}
+            {player.champions && (
+              <div
+                style={{
+                  marginTop: 30,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${player.champions.length > 6 ? 3 : 2}, minmax(0, 1fr))`,
+                  gap: "14px 10px",
+                }}
+              >
+                {player.champions.map((c) => (
+                  <div
+                    key={c.hero}
+                    style={{
+                      minWidth: 0,
+                      display: "flex",
+                      gap: 7,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Img
+                      src={asset(c.image)}
+                      style={{
+                        width: player.champions!.length > 6 ? 26 : 38,
+                        height: player.champions!.length > 6 ? 26 : 38,
+                        objectFit: "cover",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div
+                      style={{
+                        minWidth: 0,
+                        fontSize: 13,
+                        lineHeight: 1.4,
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {c.hero}
+                      <div style={{ color: p.dim }}>×{c.games}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div
+            data-player-stats
             style={{
               position: "absolute",
-              top: 715,
+              top: 734,
               left: 1105,
               right: 85,
+              boxSizing: "border-box",
               background:
                 "linear-gradient(90deg," + p.bg + "f0," + p.bg + "66)",
-              padding: "20px 0",
+              padding: "24px 32px 26px",
               borderTop: "2px solid " + color,
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)",
+              columnGap: 28,
             }}
           >
-            <div style={{ display: "flex", gap: 40, alignItems: "center" }}>
-              <div>
-                <Tag color={p.dim}>K / D / A</Tag>
-                <div style={{ ...digits, fontSize: 46, marginTop: 15 }}>
-                  {player.kills}
-                  <span style={{ color: p.dim }}> / {player.deaths} / </span>
-                  {player.assists}
-                </div>
-              </div>
+            <div style={{ minWidth: 0 }}>
+              <Tag color={p.dim}>K / D / A</Tag>
               <div
-                style={{ borderLeft: "1px solid " + p.line, paddingLeft: 35 }}
+                data-player-kda
+                style={{
+                  fontFamily: mono,
+                  fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
+                  fontSize: fit(kda, 300, 42),
+                  lineHeight: "50px",
+                  whiteSpace: "nowrap",
+                  marginTop: 12,
+                }}
               >
-                <Tag color={p.dim}>
-                  {support ? "参战率 / KP" : "队内伤害占比"}
-                </Tag>
-                <div style={{ ...digits, color, fontSize: 46, marginTop: 15 }}>
-                  {support
-                    ? axisValue(participation(m, player), "%")
-                    : teamTotal
-                      ? ((100 * player.damage) / teamTotal).toFixed(1)
-                      : "0.0"}
-                  {!support && <span style={{ fontSize: 25 }}>%</span>}
-                </div>
+                {player.kills}
+                <span style={{ color: p.dim }}> / {player.deaths} / </span>
+                {player.assists}
+              </div>
+            </div>
+            <div
+              style={{
+                minWidth: 0,
+                borderLeft: "1px solid " + p.line,
+                paddingLeft: 28,
+              }}
+            >
+              <Tag color={p.dim}>
+                {support ? "参战率 / KP" : "队内伤害占比"}
+              </Tag>
+              <div
+                style={{
+                  ...digits,
+                  color,
+                  fontSize: 46,
+                  lineHeight: "50px",
+                  marginTop: 12,
+                }}
+              >
+                {support
+                  ? axisValue(participation(m, player), "%")
+                  : teamTotal
+                    ? ((100 * player.damage) / teamTotal).toFixed(1)
+                    : "0.0"}
+                {!support && <span style={{ fontSize: 25 }}>%</span>}
               </div>
             </div>
           </div>
@@ -1457,10 +1518,12 @@ function RadarScene(props: Ctx) {
           {focus.map((pl) => (
             <div
               key={pl.slot}
+              data-player-comparison
               style={{
                 marginTop: 30,
                 borderLeft: "4px solid " + teamColor(pl, s),
-                padding: "6px 0 12px 24px",
+                padding: "20px 28px 22px",
+                boxSizing: "border-box",
                 background:
                   "linear-gradient(90deg," +
                   teamColor(pl, s) +
@@ -1469,13 +1532,14 @@ function RadarScene(props: Ctx) {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
                 <Portrait p={pl} width={124} height={78} />
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div
                     style={{
                       fontFamily: display,
                       fontSize: fit(pl.name, 480, 43),
                       fontWeight: 900,
                       color: teamColor(pl, s),
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {pl.name}
@@ -1485,7 +1549,10 @@ function RadarScene(props: Ctx) {
                   </div>
                 </div>
               </div>
-              <div style={{ fontFamily: mono, fontSize: 26, marginTop: 17 }}>
+              <div
+                data-comparison-stats
+                style={{ fontFamily: mono, fontSize: 26, marginTop: 17 }}
+              >
                 {pl.kills} / {pl.deaths} / {pl.assists}{" "}
                 <span style={{ fontSize: 18, color: p.dim }}>KDA</span>
                 <span style={{ marginLeft: 40 }}>
@@ -1528,7 +1595,7 @@ function RadarScene(props: Ctx) {
       <div
         style={{
           position: "absolute",
-          top: 878,
+          top: 892,
           left: 1105,
           right: 85,
           color: p.dim,
@@ -1563,31 +1630,34 @@ function Damage(props: Ctx) {
         p={leader}
         style={{
           position: "absolute",
-          left: 30,
-          top: 249,
-          width: 740,
-          height: 650,
-          opacity: 0.64,
-          maskImage: "linear-gradient(to bottom,#000 40%,transparent 98%)",
+          left: 85,
+          top: 258,
+          width: 610,
+          height: 410,
+          opacity: 0.94,
+          maskImage: "linear-gradient(to bottom,#000 88%,transparent 100%)",
         }}
       />
-      <div style={{ position: "absolute", top: 559, left: 85, width: 610 }}>
+      <div
+        data-damage-identity
+        style={{ position: "absolute", top: 690, left: 85, width: 610 }}
+      >
         <Tag color={color}>
           {m.series ? "系列赛累计英雄伤害第一" : "全场英雄伤害第一"}
         </Tag>
         <div
           style={{
             ...digits,
-            fontSize: fit(leader.name, 600, 75),
-            margin: "16px 0 24px",
+            fontSize: fit(leader.name, 600, 64),
+            margin: "14px 0 18px",
           }}
         >
           {leader.name}
         </div>
-        <div style={{ ...digits, fontSize: 92, color }}>
+        <div style={{ ...digits, fontSize: 76, color }}>
           {num(leader.damage)}
         </div>
-        <div style={{ fontSize: 23, color: p.dim, marginTop: 20 }}>
+        <div style={{ fontSize: 20, color: p.dim, marginTop: 16 }}>
           {m[leader.side]} · {leader.hero}
         </div>
       </div>
@@ -1906,6 +1976,7 @@ export function MatchFilm(props: VideoProps) {
       </div>
       {s.captions && caption && (
         <div
+          data-film-caption
           style={{
             position: "absolute",
             bottom: 88,
