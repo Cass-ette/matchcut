@@ -6,6 +6,11 @@ import path from "node:path";
 import { browserPath } from "../server/render";
 import { comparisons } from "../src/domain";
 
+if (process.argv.includes("--render-status")) {
+  await import("./render-status-smoke");
+  process.exit(0);
+}
+
 if (process.argv.includes("--settings")) {
   await import("./settings-smoke");
   process.exit(0);

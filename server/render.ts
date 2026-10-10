@@ -46,6 +46,13 @@ export type Job = {
   progress: number;
   message: string;
   createdAt: string;
+  updatedAt?: string;
+  renderProgress?: {
+    renderedFrames: number;
+    encodedFrames: number;
+    totalFrames: number;
+    stage: "rendering" | "encoding" | "muxing";
+  };
   matchId?: string;
   title?: string;
   error?: string;
@@ -113,10 +120,21 @@ export async function runRender(
       browserExecutable,
     });
     job.status = "rendering";
-    job.message = "渲染视频画面";
+    const frameCount = composition.durationInFrames;
+    job.renderProgress = {
+      renderedFrames: 0,
+      encodedFrames: 0,
+      totalFrames: frameCount,
+      stage: "rendering",
+    };
+    job.message = `渲染画面 0 / ${frameCount} 帧`;
     job.progress = 20;
     await update();
+    console.info(
+      `[${new Date().toISOString()}] [job:${job.id}] 开始 ${job.width}×${job.height}，${frameCount} 帧，并发 ${renderConcurrency(settings.resolution)}`,
+    );
     let lastProgress = 0;
+    let lastLog = 0;
     await renderMedia({
       composition,
       serveUrl,
@@ -131,11 +149,42 @@ export async function runRender(
       ...(bgmTrack ? { audioCodec: "aac" as const, audioBitrate: "192k" } : {}),
       scale: output.scale,
       timeoutInMilliseconds: 120000,
-      onProgress: ({ progress }) => {
+      onProgress: ({
+        progress,
+        renderedFrames,
+        encodedFrames,
+        stitchStage,
+      }) => {
         job.progress = 20 + Math.floor(progress * 72);
+        const stage =
+          stitchStage === "muxing"
+            ? "muxing"
+            : renderedFrames < frameCount
+              ? "rendering"
+              : "encoding";
+        job.renderProgress = {
+          renderedFrames,
+          encodedFrames,
+          totalFrames: frameCount,
+          stage,
+        };
+        job.message =
+          stage === "muxing"
+            ? "合并音视频"
+            : stage === "rendering"
+              ? `渲染画面 ${renderedFrames} / ${frameCount} 帧 · 已编码 ${encodedFrames} 帧`
+              : `编码视频 ${encodedFrames} / ${frameCount} 帧`;
         if (Date.now() - lastProgress > 1500) {
           lastProgress = Date.now();
-          void update();
+          void update().catch((error) =>
+            console.error(`[job:${job.id}] 保存进度失败：`, error),
+          );
+        }
+        if (Date.now() - lastLog > 30_000) {
+          lastLog = Date.now();
+          console.info(
+            `[${new Date().toISOString()}] [job:${job.id}] ${job.progress}% ${job.message}`,
+          );
         }
       },
     });
@@ -264,7 +313,14 @@ export async function runRender(
     job.progress = 100;
     job.message = "视频已生成，可以预览和下载";
     await update();
+    console.info(
+      `[${new Date().toISOString()}] [job:${job.id}] ${job.message}`,
+    );
   } catch (e) {
+    console.error(
+      `[${new Date().toISOString()}] [job:${job.id}] 渲染失败：`,
+      e,
+    );
     job.status = "error";
     job.error = (e as Error).message;
     job.message = "生成失败，设置和数据已保留";

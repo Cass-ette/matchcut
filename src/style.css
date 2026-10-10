@@ -643,6 +643,9 @@ svg {
   background: var(--accent);
   transition: width 0.8s;
 }
+.progress-track.disconnected > div {
+  background: var(--muted);
+}
 .inspector .panel-title > svg {
   margin-left: auto;
   color: var(--muted);
@@ -1484,6 +1487,18 @@ select {
   color: #f6c453;
   background: #241e13;
   font-weight: 700;
+}
+.csv-download {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 18px;
+  color: #f6c453;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.csv-download:hover {
+  text-decoration: underline;
 }
 .lol-match-list {
   max-height: 250px;

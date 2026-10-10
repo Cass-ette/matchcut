@@ -9,6 +9,9 @@
   "scripts": {
     "dev": "MATCHCUT_DEV=1 tsx watch --ignore './data/**' --ignore './output/**' --ignore './public/**' server/index.ts",
     "start": "tsx server/index.ts",
+    "service:start": "tsx scripts/mac-service.ts start",
+    "service:stop": "tsx scripts/mac-service.ts stop",
+    "service:status": "tsx scripts/mac-service.ts status",
     "build": "tsc --noEmit && vite build",
     "test": "tsx --test tests/*.test.ts",
     "studio": "remotion studio src/video/index.tsx",

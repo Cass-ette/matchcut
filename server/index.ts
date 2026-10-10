@@ -1,13 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import {
-  mkdir,
-  readFile,
-  writeFile,
-  readdir,
-  access,
-  rename,
-} from "node:fs/promises";
+import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -28,6 +21,7 @@ import {
   recentMatches,
 } from "./source";
 import { Job, runRender } from "./render";
+import { jobWriter, restoreJobs } from "./job-store";
 import {
   csLibrary,
   listCsMatches,
@@ -78,6 +72,13 @@ const preferenceFile = (game: string) =>
 const root = process.cwd(),
   port = Number(process.env.PORT || 4317),
   origin = "http://127.0.0.1:" + port;
+process.on("uncaughtExceptionMonitor", (error, source) => {
+  console.error(`[${new Date().toISOString()}] 后台异常 (${source})：`, error);
+});
+process.on("exit", (code) => {
+  console.info(`[${new Date().toISOString()}] 后台退出，code=${code}`);
+});
+console.info(`[${new Date().toISOString()}] 后台启动，pid=${process.pid}`);
 const thumbnails = new Thumbnails(root, (sha) => logoCatalog.image(sha));
 await initializeData();
 await mkdir(path.join(root, "output"), { recursive: true });
@@ -99,20 +100,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "128kb" }));
 app.use("/assets", express.static(path.join(root, "public/assets")));
 app.use("/output", express.static(path.join(root, "output")));
-const jobs = new Map<string, Job>();
-for (const dir of await readdir(path.join(root, "output"))) {
-  try {
-    const job: Job = JSON.parse(
-      await readFile(path.join(root, "output", dir, "job.json"), "utf8"),
-    );
-    if (!["done", "error"].includes(job.status)) {
-      job.status = "error";
-      job.error = "上次进程已结束，请重新生成。";
-      job.message = job.error;
-    }
-    jobs.set(job.id, job);
-  } catch {}
-}
+const jobs = await restoreJobs(path.join(root, "output"));
 const wrap =
   (fn: (req: express.Request, res: express.Response) => Promise<any>) =>
   (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -597,16 +585,7 @@ app.post(
     jobs.set(id, job);
     const dir = path.join(root, "output", id);
     await mkdir(dir, { recursive: true });
-    let writeQueue = Promise.resolve();
-    const update = () => {
-      const content = JSON.stringify(job, null, 2);
-      writeQueue = writeQueue.then(async () => {
-        const target = path.join(dir, "job.json");
-        await writeFile(target + ".tmp", content);
-        await rename(target + ".tmp", target);
-      });
-      return writeQueue;
-    };
+    const update = jobWriter(dir, job);
     await update();
     res.status(202).json(job);
     void (async () => {
@@ -627,6 +606,10 @@ app.post(
             : body.settings;
         await runRender(job, data.match, data.raw, settings, origin, update);
       } catch (e) {
+        console.error(
+          `[${new Date().toISOString()}] [job:${job.id}] 任务失败：`,
+          e,
+        );
         job.status = "error";
         job.error = (e as Error).message;
         job.message = "数据暂不可用，未生成误导内容";

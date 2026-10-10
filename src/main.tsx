@@ -14,6 +14,7 @@ import {
   Clock3,
   Copy,
   Database,
+  ExternalLink,
   FileJson,
   Film,
   FolderDown,
@@ -29,6 +30,7 @@ import {
   Type,
   Upload,
   WandSparkles,
+  WifiOff,
   X,
 } from "lucide-react";
 import {
@@ -81,6 +83,7 @@ type Job = {
   matchId?: string;
   files?: Record<string, string>;
   createdAt: string;
+  updatedAt?: string;
   props?: VideoProps;
   width?: number;
   height?: number;
@@ -139,6 +142,7 @@ function App() {
     [teamId, setTeamId] = useState("");
   const [loading, setLoading] = useState(false),
     [job, setJob] = useState<Job | null>(null),
+    [jobDisconnected, setJobDisconnected] = useState(false),
     [jobs, setJobs] = useState<Job[]>([]),
     [tab, setTab] = useState<"design" | "script">("design");
   const [scene, setScene] = useState(0),
@@ -272,11 +276,21 @@ function App() {
     if (!busy || !job) return;
     let stopped = false;
     let pollErrors = 0;
+    let nextPoll: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    setJobDisconnected(false);
     const poll = async () => {
+      let finished = false;
       try {
-        const value = await api<Job>("/api/jobs/" + job.id);
+        const value = await api<Job>("/api/jobs/" + job.id, {
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(8000),
+          ]),
+        });
         if (stopped) return;
         pollErrors = 0;
+        setJobDisconnected(false);
         setJob(value);
         if (value.props && appliedJob.current !== value.id) {
           const nextSettings = settingsSchema.parse(value.props.settings);
@@ -291,23 +305,35 @@ function App() {
           setSettings(nextSettings);
         }
         if (value.status === "done") {
+          finished = true;
           setResult(value);
-          setJobs(await api("/api/jobs"));
+          setJobs((current) => [
+            value,
+            ...current.filter((j) => j.id !== value.id),
+          ]);
           setToast("视频、封面和字幕都准备好了");
         }
-        if (value.status === "error") setError(value.error || value.message);
-      } catch (e) {
-        if (++pollErrors >= 3 && !stopped)
-          setError(
-            "暂时无法读取生成进度。后台任务可能仍在继续，请恢复连接后刷新。",
-          );
+        if (value.status === "error") {
+          finished = true;
+          setJobs((current) => [
+            value,
+            ...current.filter((j) => j.id !== value.id),
+          ]);
+          setError(value.error || value.message);
+        }
+      } catch {
+        if (++pollErrors >= 3 && !stopped) setJobDisconnected(true);
+      } finally {
+        // Schedule only after this request settles, so a slow server cannot
+        // accumulate overlapping polls while it is rendering.
+        if (!stopped && !finished) nextPoll = setTimeout(poll, 1200);
       }
     };
-    const id = setInterval(poll, 1200);
     void poll();
     return () => {
       stopped = true;
-      clearInterval(id);
+      clearTimeout(nextPoll);
+      controller.abort();
     };
   }, [busy, job?.id]);
   const bgmTrack = bgmTracks.find(
@@ -974,9 +1000,18 @@ function App() {
                 }}
               />
               <p>
-                支持 Oracle’s Elixir 年度
-                CSV。导入后保存在本机，重复生成无需重新上传。
+                打开 Oracle’s Elixir 下载页，点击 Google
+                Drive，选择比赛对应年份的完整 CSV，再点上方导入。
+                导入后保存在本机；更新比赛库时下载新版重新导入。
               </p>
+              <a
+                className="csv-download"
+                href="https://oracleselixir.com/tools/downloads"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink size={14} /> 下载比赛 CSV · Oracle’s Elixir
+              </a>
               <label className="field-label">筛选已保存比赛</label>
               <input
                 aria-label="筛选英雄联盟比赛"
@@ -1648,9 +1683,19 @@ function App() {
           </section>
           <div className="export-bar">
             <div>
-              <b>{busy ? "正在渲染赛后节目" : "导出横屏成片"}</b>
+              <b>
+                {busy
+                  ? jobDisconnected
+                    ? "与渲染服务的连接已中断"
+                    : "正在渲染赛后节目"
+                  : "导出横屏成片"}
+              </b>
               <span>
-                {busy ? job?.message : "MP4 视频 + 封面 + 字幕 + 数据档案"}
+                {busy
+                  ? jobDisconnected
+                    ? `最后进度 ${job?.progress}%${job?.updatedAt ? " · " + new Date(job.updatedAt).toLocaleTimeString() : ""}。正在自动重连；若服务已关闭，请双击「启动 Matchcut.command」。`
+                    : job?.message
+                  : "MP4 视频 + 封面 + 字幕 + 数据档案"}
               </span>
             </div>
             <button
@@ -1658,22 +1703,35 @@ function App() {
               onClick={generate}
               disabled={busy || loading || (incomplete && source !== "latest")}
             >
-              {busy ? (
+              {busy && jobDisconnected ? (
+                <WifiOff size={18} />
+              ) : busy ? (
                 <LoaderCircle size={18} className="spin" />
               ) : (
                 <Clapperboard size={18} />
               )}{" "}
-              {busy ? "生成中 " + job?.progress + "%" : "一键生成视频"}
+              {busy
+                ? jobDisconnected
+                  ? "连接中断"
+                  : "生成中 " + job?.progress + "%"
+                : "一键生成视频"}
               {!busy && <ArrowRight size={17} />}
             </button>
           </div>
           {busy && (
             <div
-              className="progress-track"
+              className={
+                "progress-track" + (jobDisconnected ? " disconnected" : "")
+              }
               role="progressbar"
               aria-valuenow={job?.progress}
               aria-valuemin={0}
               aria-valuemax={100}
+              aria-valuetext={
+                jobDisconnected
+                  ? `连接中断，最后进度 ${job?.progress}%`
+                  : job?.message
+              }
             >
               <div style={{ width: job?.progress + "%" }} />
             </div>
@@ -2360,6 +2418,19 @@ function App() {
                     ? "导入 Oracle’s Elixir CSV，按战队、联赛或日期筛选。可选择 G1–G5 生成单局，或切换「系列赛汇总」统计已收录局。"
                     : "输入 OpenDota 比赛编号，或浏览最近职业赛。"}
               </li>
+              {lol && (
+                <li>
+                  <b>下载比赛 CSV：</b>
+                  <a
+                    href="https://oracleselixir.com/tools/downloads"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Oracle’s Elixir 下载页 ↗
+                  </a>
+                  ，选择比赛对应年份的完整 CSV，下载后点击「导入职业赛 CSV」。
+                </li>
+              )}
               <li>
                 <b>长期使用：</b>
                 {cs
