@@ -7,7 +7,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "MATCHCUT_DEV=1 tsx server/index.ts",
+    "dev": "MATCHCUT_DEV=1 tsx watch --ignore './data/**' --ignore './output/**' --ignore './public/**' server/index.ts",
     "start": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "test": "tsx --test tests/*.test.ts",

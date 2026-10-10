@@ -182,6 +182,7 @@ function App() {
         (new URLSearchParams(location.search).get("game") ||
           localStorage.getItem("matchcut-game") ||
           "dota2"),
+      { signal: AbortSignal.timeout(30_000) },
     )
       .then((data) => {
         setMatch(data.match);
@@ -198,7 +199,7 @@ function App() {
                   settingsSchema.parse(prefs.settings),
                   true,
                 )
-            : data.settings,
+            : settingsSchema.parse(data.settings),
         );
         setSource(
           data.match.game === "lol" || data.match.game === "cs2"
@@ -215,7 +216,13 @@ function App() {
         if (active) setJob(active);
         ready.current = true;
       })
-      .catch((e) => setError(e.message));
+      .catch((e) =>
+        setError(
+          e.name === "TimeoutError"
+            ? "打开工作台超时，后台可能仍在初始化，请稍后重新连接。"
+            : e.message,
+        ),
+      );
   }, []);
   useEffect(() => {
     if (!match) return;
@@ -272,6 +279,7 @@ function App() {
         pollErrors = 0;
         setJob(value);
         if (value.props && appliedJob.current !== value.id) {
+          const nextSettings = settingsSchema.parse(value.props.settings);
           appliedJob.current = value.id;
           setMatch(value.props.match);
           if (
@@ -280,7 +288,7 @@ function App() {
           )
             setSource("current");
           setMatchId(value.props.match.id);
-          setSettings(value.props.settings);
+          setSettings(nextSettings);
         }
         if (value.status === "done") {
           setResult(value);
@@ -362,7 +370,9 @@ function App() {
       setSettings(
         (current) =>
           drafts.current.get(draftKey(data.match)) ??
-          (current ? refreshSettings(data.match, current) : data.settings),
+          (current
+            ? refreshSettings(data.match, current)
+            : settingsSchema.parse(data.settings)),
       );
       setSource("current");
       setRecent(null);
@@ -534,6 +544,8 @@ function App() {
   }
   async function generate() {
     if (!match || !settings || busy) return;
+    player.current?.pause();
+    bgmPreview.current?.pause();
     setError("");
     setResult(null);
     try {

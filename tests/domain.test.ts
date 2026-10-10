@@ -267,6 +267,21 @@ test("blank scripts are valid and omit captions without collapsing scene timing"
   assert.equal(mixed.at(-1)!.end, 288);
 });
 
+test("legacy settings without MVP load safely and receive defaults without mutating the archive", () => {
+  const m = match();
+  const legacy = JSON.parse(JSON.stringify(defaultSettings(m)));
+  delete legacy.mvp;
+  assert.equal(mvpFor(m, legacy), undefined);
+  const props = previewProps(m, legacy);
+  assert.deepEqual(props.settings.mvp, {
+    enabled: false,
+    mode: "auto",
+    manual: {},
+  });
+  assert.ok(props.segments.every((segment) => segment.sceneIndex !== 6));
+  assert.equal(Object.hasOwn(legacy, "mvp"), false);
+});
+
 test("MVP is explicit about source, honors a valid manual slot and falls back to damage", () => {
   const m = match();
   const settings = settingsSchema.parse({

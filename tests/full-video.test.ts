@@ -160,6 +160,25 @@ test("one recorded game removes aggregate duplication; partial and malformed arc
   );
 });
 
+test("legacy full-video settings populate defaults in every chapter", () => {
+  const match = fixture();
+  const legacy = JSON.parse(JSON.stringify(defaultSettings(match)));
+  delete legacy.mvp;
+  const props = previewProps(match, legacy);
+  assert.deepEqual(props.settings.mvp, {
+    enabled: false,
+    mode: "auto",
+    manual: {},
+  });
+  assert.ok(
+    props.chapters!.every((chapter) => chapter.settings.mvp.enabled === false),
+  );
+  assert.equal(
+    videoScenes(props).filter((scene) => scene.slot === 6).length,
+    0,
+  );
+});
+
 test("full videos put an MVP after each game's complete damage ranking, never in the series aggregate", () => {
   const match = fixture();
   const settings = defaultSettings(match);

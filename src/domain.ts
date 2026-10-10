@@ -684,7 +684,7 @@ export function mvpFor(
   settings: Settings,
 ): MvpSelection | undefined {
   // A series aggregate is not an individual game award, and CS MVP is out of scope.
-  if (match.game === "cs2" || match.series || !settings.mvp.enabled)
+  if (match.game === "cs2" || match.series || !settings.mvp?.enabled)
     return undefined;
   const manual = settings.mvp.manual[match.id];
   if (settings.mvp.mode === "manual" && manual !== undefined) {
@@ -979,6 +979,8 @@ export function previewProps(
   settings: Settings,
   bgmTrack?: BgmTrack,
 ): VideoProps {
+  // Settings can come from older saved projects or a still-running older server.
+  settings = settingsSchema.parse(settings);
   if (match.fullGames) return fullVideoProps(match, settings, bgmTrack);
   const groups = comparisons(match, settings);
   const base = [7, 10, groups.length > 1 ? groups.length * 18 : 24, 10, 7];

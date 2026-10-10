@@ -17,6 +17,7 @@ import {
   comparisons,
   ReportData,
   Settings,
+  settingsSchema,
   VideoProps,
   previewProps,
   srt,
@@ -27,11 +28,16 @@ import {
 } from "../src/domain";
 
 const root = process.cwd();
-export function renderConcurrency() {
+export function renderConcurrency(resolution?: Settings["resolution"]) {
   const available = Math.max(1, os.cpus().length - 1);
-  const configured = Number(process.env.MATCHCUT_RENDER_CONCURRENCY || 2);
+  const defaultConcurrency = resolution === "2160" ? 1 : 2;
+  const configured = Number(
+    process.env.MATCHCUT_RENDER_CONCURRENCY || defaultConcurrency,
+  );
   const requested =
-    Number.isInteger(configured) && configured > 0 ? configured : 2;
+    Number.isInteger(configured) && configured > 0
+      ? configured
+      : defaultConcurrency;
   return Math.min(available, requested);
 }
 export type Job = {
@@ -78,6 +84,7 @@ export async function runRender(
   const folder = path.join(root, "output", job.id);
   await mkdir(folder, { recursive: true });
   try {
+    settings = settingsSchema.parse(settings);
     job.matchId = match.id;
     job.title = settings.headline;
     job.message = "按阅读节奏编排字幕与镜头";
@@ -117,7 +124,7 @@ export async function runRender(
       outputLocation: path.join(folder, "matchcut.mp4"),
       inputProps: props,
       browserExecutable,
-      concurrency: renderConcurrency(),
+      concurrency: renderConcurrency(settings.resolution),
       crf: 19,
       pixelFormat: "yuv420p",
       muted: !bgmTrack,
