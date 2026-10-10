@@ -1,11 +1,12 @@
+import os from "node:os";
+import { browserPath } from "./browser";
 import { bundle } from "@remotion/bundler";
 import {
   renderMedia,
   renderStill,
   selectComposition,
 } from "@remotion/renderer";
-import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveBgm } from "./audio-source";
 import {
@@ -41,28 +42,7 @@ export type Job = {
   height?: number;
   warnings: string[];
 };
-export async function browserPath(): Promise<string | undefined> {
-  if (process.env.MATCHCUT_BROWSER) return process.env.MATCHCUT_BROWSER;
-  const base = path.join(os.homedir(), "Library/Caches/ms-playwright");
-  try {
-    const dirs = (await readdir(base))
-      .filter((x) => x.startsWith("chromium_headless_shell-"))
-      .sort()
-      .reverse();
-    for (const d of dirs) {
-      const p = path.join(
-        base,
-        d,
-        "chrome-headless-shell-mac-arm64/chrome-headless-shell",
-      );
-      try {
-        await access(p);
-        return p;
-      } catch {}
-    }
-  } catch {}
-  return undefined;
-}
+export { browserPath } from "./browser";
 let bundlePromise: Promise<string> | undefined;
 export async function prepareBundle() {
   if (!bundlePromise)

@@ -6,6 +6,11 @@ import { z } from "zod";
 import type { MatchData } from "../src/domain";
 import { championFor, type ChampionCatalog } from "../src/lol";
 import type { PlayerInventory } from "../src/items";
+import {
+  golInventories,
+  verifyGolInventory,
+  type GolInventorySnapshot,
+} from "./lol-gol";
 
 const feed = "https://feed.lolesports.com/livestats/v1";
 const dragon = "https://ddragon.leagueoflegends.com";
@@ -46,29 +51,6 @@ const windowFrame = z.object({
   blueTeam: z.object({ participants: z.array(stats).length(5) }),
   redTeam: z.object({ participants: z.array(stats).length(5) }),
 });
-const detailFrame = z.object({
-  rfc460Timestamp: time,
-  participants: z
-    .array(
-      stats.extend({ items: z.array(z.number().int().positive()).max(32) }),
-    )
-    .length(10),
-});
-const snapshotSchema = z.object({
-  schemaVersion: z.literal(1),
-  esportsGameId: id,
-  fetchedAt: time,
-  startedAt: time,
-  metadata: lolMetadataSchema,
-  window: windowFrame,
-  details: detailFrame,
-  // Recognize old cached recovery snapshots so they can be rejected. A feed
-  // restart can lose inventory state even when cumulative KDA can be verified.
-  counterReset: z
-    .object({ before: windowFrame, after: windowFrame })
-    .optional(),
-});
-export type LolInventorySnapshot = z.infer<typeof snapshotSchema>;
 export type LolItemCatalog = {
   version: string;
   items: Record<string, { name: string }>;
@@ -132,87 +114,6 @@ export function verifyLolParticipants(
   return result;
 }
 
-// Bind every participant by side + recorded role + exact name + champion.
-// The ten final K/D/A values must also match the imported game.
-export function verifyLolInventory(
-  match: MatchData,
-  input: unknown,
-  champions: ChampionCatalog,
-) {
-  assert.equal(match.game, "lol", "仅支持 LoL 单局");
-  const snapshot = snapshotSchema.parse(input);
-  assert.ok(
-    !snapshot.counterReset,
-    "这局暂停恢复后的装备记录存在断档，无法确认完整出装",
-  );
-  assert.equal(snapshot.window.gameState, "finished", "官方装备记录尚未到终局");
-  const start = Date.parse(snapshot.startedAt);
-  const end = Date.parse(snapshot.window.rfc460Timestamp);
-  assert.ok(
-    Math.abs(start - Date.parse(match.date)) < 5 * 60000,
-    "官方比赛时间与当前局不一致",
-  );
-  assert.ok(
-    end - start >= match.duration * 1000 - 30000 &&
-      end - start <= (match.duration + 7200) * 1000,
-    "官方记录时长与当前局不一致",
-  );
-  assert.equal(
-    snapshot.details.rfc460Timestamp,
-    snapshot.window.rfc460Timestamp,
-    "装备帧与终局帧不一致",
-  );
-  if (match.patch)
-    assert.equal(
-      patch(snapshot.metadata.patchVersion),
-      patch(match.patch),
-      "比赛版本不一致",
-    );
-  const participants = verifyLolParticipants(
-    match,
-    snapshot.metadata,
-    snapshot.startedAt,
-    champions,
-  );
-  const result = new Map<number, number[]>();
-  const seen = new Set<number>();
-  for (const [side, meta, teamKey] of [
-    ["radiant", snapshot.metadata.blueTeamMetadata, "blueTeam"],
-    ["dire", snapshot.metadata.redTeamMetadata, "redTeam"],
-  ] as const) {
-    const final = snapshot.window[teamKey];
-    for (const person of meta.participantMetadata) {
-      assert.ok(!seen.has(person.participantId), "官方选手编号重复");
-      seen.add(person.participantId);
-      const player = participants.get(person.participantId)!;
-      const details = snapshot.details.participants.filter(
-        (p) => p.participantId === person.participantId,
-      );
-      const records = final.participants.filter(
-        (p) => p.participantId === person.participantId,
-      );
-      assert.equal(details.length, 1, "装备选手数据不完整");
-      assert.equal(records.length, 1, "终局选手数据不完整");
-      for (const record of [details[0], records[0]])
-        for (const key of ["kills", "deaths", "assists"] as const)
-          assert.equal(
-            record[key],
-            player[key],
-            `官方终局 KDA 与当前局不一致（${player.name}）`,
-          );
-      // The feed is a list, including trinkets/consumables and stack copies.
-      // It does not describe six hotkey slots. Do not pad it with empty slots.
-      assert.ok(
-        new Set(details[0].items).size <= 8,
-        "该局装备列表超出可展示范围",
-      );
-      result.set(player.slot, details[0].items);
-    }
-  }
-  assert.equal(result.size, 10, "十名选手装备未完整核对");
-  return { snapshot, items: result };
-}
-
 export function lolInventory(
   ids: number[],
   catalog: LolItemCatalog,
@@ -242,12 +143,16 @@ async function save(file: string, bytes: string | Buffer) {
   await rename(tmp, file);
 }
 export class LolItems {
-  private pending = new Map<string, Promise<LolInventorySnapshot>>();
+  private pending = new Map<string, Promise<GolInventorySnapshot>>();
   private imageTasks = new Map<string, Promise<boolean>>();
   private failedImages = new Map<string, number>();
   constructor(
     private root: string,
     private request: typeof fetch = fetch,
+    private inventorySource: Pick<
+      typeof golInventories,
+      "fetch"
+    > = golInventories,
   ) {}
   private async get(url: string, init?: RequestInit) {
     const r = await this.request(url, {
@@ -383,13 +288,13 @@ export class LolItems {
     champions: ChampionCatalog,
     network: boolean,
   ) {
-    const { snapshot, items } = verifyLolInventory(match, input, champions);
+    const { snapshot, items } = verifyGolInventory(match, input, champions);
     // An unavailable icon catalog must not discard verified equipment IDs.
     const catalog: LolItemCatalog = await this.catalog(
-      snapshot.metadata.patchVersion,
+      snapshot.patchVersion,
       network,
     ).catch(() => ({
-      version: patch(snapshot.metadata.patchVersion) + ".1",
+      version: patch(snapshot.patchVersion) + ".1",
       items: {},
     }));
     const inventories = match.players.map((p) =>
@@ -422,9 +327,10 @@ export class LolItems {
           item.image = `/assets/lol/items/${catalog.version}/${item.id}.png`;
     });
     match.inventorySource = {
-      url: `${feed}/details/${snapshot.esportsGameId}`,
+      url: snapshot.sourceUrl,
       fetchedAt: snapshot.fetchedAt,
-      timestamp: snapshot.details.rfc460Timestamp,
+      scope: "final",
+      quantityMode: snapshot.quantityMode,
     };
   }
   async readWindow(gameId: string, at?: number, signal?: AbortSignal) {
@@ -486,94 +392,24 @@ export class LolItems {
       throw new Error("官方赛程中没有可准确核对的单局记录，当前统计保持不变。");
     return games.map((game: any) => ({ id: id.parse(game.id) }));
   }
-  private async fetchSnapshot(match: MatchData): Promise<LolInventorySnapshot> {
-    const games = await this.candidates(match);
-    const champions = await this.champions();
-    const date = Date.parse(match.date);
-    const verified: LolInventorySnapshot[] = [];
-    const failures: string[] = [];
-    for (const game of games) {
-      const gameId = id.parse(game.id);
-      const initial = await this.readWindow(gameId);
-      const first = initial.frames[0];
-      if (Math.abs(Date.parse(first.rfc460Timestamp) - date) >= 5 * 60000)
-        continue;
-      try {
-        const after =
-          Math.ceil((date + (match.duration + 7200) * 1000) / 10000) * 10000;
-        const ending = await this.readWindow(gameId, after);
-        assert.deepEqual(
-          ending.metadata,
-          initial.metadata,
-          "终局选手或英雄不一致",
-        );
-        const final = ending.frames.at(-1)!;
-        if (final.gameState === "paused")
-          throw new Error("官方接口返回暂停阶段的记录，无法确认完整的终局装备");
-        assert.equal(final.gameState, "finished", "官方记录尚未包含终局数据");
-        // Fetch the actual final bucket. A request beyond it can return an old
-        // segment even when a correctly timestamped finished frame exists.
-        const finalTime = new Date(
-          Math.floor(Date.parse(final.rfc460Timestamp) / 10000) * 10000,
-        ).toISOString();
-        const details = await this.get(
-          `${feed}/details/${gameId}?startingTime=${encodeURIComponent(finalTime)}`,
-        );
-        const detail = z
-          .array(detailFrame)
-          .min(1)
-          .parse(details.frames)
-          .find((f) => f.rfc460Timestamp === final.rfc460Timestamp);
-        assert.ok(detail, "官方装备记录缺少与终局同步的数据帧");
-        const snapshot = verifyLolInventory(
-          match,
-          {
-            schemaVersion: 1,
-            esportsGameId: gameId,
-            fetchedAt: new Date().toISOString(),
-            startedAt: first.rfc460Timestamp,
-            metadata: initial.metadata,
-            window: final,
-            details: detail,
-          },
-          champions,
-        ).snapshot;
-        verified.push(snapshot);
-      } catch (error) {
-        // Keep the precise reason for time-matched candidates. Never discard
-        // an unfinished/paused source behind a generic player-name error.
-        failures.push(
-          error instanceof z.ZodError
-            ? "官方装备数据不完整或格式已变化"
-            : error instanceof Error
-              ? error.name === "TimeoutError" || error.name === "AbortError"
-                ? "官方装备请求超时，请稍后重试"
-                : error.message.split("\n")[0]
-              : "官方装备校验失败",
-        );
-      }
-    }
-    if (verified.length > 1)
-      throw new Error(
-        "多场官方记录均通过核对，无法唯一确定当前局，未写入装备。",
-      );
-    if (!verified.length)
-      throw new Error(
-        `${[...new Set(failures)].join("；") || "没有开赛时间吻合的官方单局记录"}，未写入装备。`,
-      );
-    return verified[0];
-  }
   async sync(match: MatchData) {
     assert.equal(match.game, "lol");
     let task = this.pending.get(match.id);
     if (!task) {
-      task = this.fetchSnapshot(match);
+      task = this.champions().then((champions) =>
+        this.inventorySource.fetch(match, champions),
+      );
       this.pending.set(match.id, task);
     }
     try {
       const snapshot = await task;
-      await this.attach(match, snapshot, await this.champions(), true);
+      const updated = structuredClone(match);
+      await this.attach(updated, snapshot, await this.champions(), true);
       await save(this.file(match), JSON.stringify(snapshot, null, 2));
+      match.players.forEach((player, i) => {
+        player.inventory = updated.players[i].inventory;
+      });
+      match.inventorySource = updated.inventorySource;
     } finally {
       if (this.pending.get(match.id) === task) this.pending.delete(match.id);
     }

@@ -257,7 +257,13 @@ export type MatchData = {
   objectives?: { label: string; radiant?: number; dire?: number }[];
   gameNumber?: number;
   patch?: string;
-  inventorySource?: { url: string; fetchedAt: string; timestamp: string };
+  inventorySource?: {
+    url: string;
+    fetchedAt: string;
+    timestamp?: string;
+    scope?: "final";
+    quantityMode?: "occupied-slots";
+  };
   runeSource?: { url: string; fetchedAt: string; timestamp: string };
   cs?: {
     version: "CS2" | "CSGO";
