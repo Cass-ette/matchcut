@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { load } from "cheerio";
@@ -31,13 +31,39 @@ const tournaments = await read("tests/fixtures/gol/tournaments.json");
 const matchlist = await readFile("tests/fixtures/gol/matchlist.html", "utf8");
 const paused = await read("tests/fixtures/lol-paused-474169.json");
 
-test("bundled GOL sample reopens offline with every local icon and unchanged statistics", async () => {
+test("bundled GOL sample reopens offline with every local icon and unchanged statistics", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "matchcut-bundled-items-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fixture = "data/fixtures/lol/inventories/LOLTMNT02_76144.json";
+  const catalogPath = "data/fixtures/lol/item-catalogs/14.6.json";
+  const catalog = await read(catalogPath);
+  const snapshot = await read(fixture);
+  for (const id of snapshot.players.flatMap(
+    (p: { items: number[] }) => p.items,
+  ))
+    assert.ok(
+      catalog.bundledIds.includes(id),
+      `Sample item ${id} must be bundled`,
+    );
+  // Reproduce a clean installation; ignored local downloads cannot hide gaps.
+  for (const file of [
+    fixture,
+    catalogPath,
+    "data/fixtures/lol/champions.json",
+    ...catalog.bundledIds.map(
+      (id: number) => `public/assets/lol/items/${catalog.version}/${id}.png`,
+    ),
+  ]) {
+    const dest = path.join(root, file);
+    await mkdir(path.dirname(dest), { recursive: true });
+    await cp(file, dest);
+  }
   const { normalizeLol } = await import("../src/lol");
   const raw = await read("data/fixtures/lol/LOLTMNT02_76144.json");
   const match = normalizeLol(raw.rows, champions, raw.fetchedAt);
   const before = structuredClone(match);
   let calls = 0;
-  const library = new LolItems(process.cwd(), async () => {
+  const library = new LolItems(root, async () => {
     calls++;
     throw new Error("offline");
   });
@@ -55,7 +81,9 @@ test("bundled GOL sample reopens offline with every local icon and unchanged sta
       assert.ok(item);
       assert.ok(item?.image?.startsWith("/assets/lol/items/14.6.1/"));
       assert.equal(
-        (await readFile("public" + item.image)).subarray(0, 8).toString("hex"),
+        (await readFile(path.join(root, "public" + item.image)))
+          .subarray(0, 8)
+          .toString("hex"),
         "89504e470d0a1a0a",
       );
     }
@@ -221,6 +249,7 @@ function sourceFixture() {
     active = 0,
     maxActive = 0,
     broken = false,
+    partial = false,
     ambiguous = false;
   const source = new GolInventories(async () => {
     maxActive = Math.max(maxActive, ++active);
@@ -243,6 +272,7 @@ function sourceFixture() {
             ? html[0].replaceAll("83540", "99999")
             : html[0];
         if (broken) throw new Error("source offline");
+        if (partial && url.includes("99999")) return "<html></html>";
         return url.includes("83541")
           ? html[1]
           : url.includes("99999")
@@ -269,6 +299,9 @@ function sourceFixture() {
     },
     set ambiguous(v: boolean) {
       ambiguous = v;
+    },
+    set partial(v: boolean) {
+      partial = v;
     },
   };
 }
@@ -299,6 +332,17 @@ test("source serializes browser work, reuses discovery, closes sessions and reje
   ambiguous.ambiguous = true;
   await assert.rejects(ambiguous.source.fetch(matches[0], champions), /多场/);
   assert.equal(ambiguous.closed, 1);
+});
+
+test("an unreadable alternative candidate cannot prove a unique final inventory", async () => {
+  const fixture = sourceFixture();
+  fixture.ambiguous = true;
+  fixture.partial = true;
+  await assert.rejects(
+    fixture.source.fetch(matches[0], champions),
+    /缺少唯一局数/,
+  );
+  assert.equal(fixture.closed, 1);
 });
 
 test("sync caches verified inventories atomically, deduplicates fetching, works offline and preserves data on failure", async (t) => {

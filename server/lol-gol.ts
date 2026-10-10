@@ -510,6 +510,9 @@ export class GolInventories {
       const verified: GolInventorySnapshot[] = [],
         failures: string[] = [];
       for (const url of series) {
+        // An unreadable candidate cannot be ruled out as a second match.
+        // Let discovery/parsing errors abort; only a complete record with
+        // mismatching identities/statistics can safely be discarded below.
         const gameUrl = golGameLink(await read(url), match.gameNumber!);
         const snapshot = parseGolGame(
           await read(gameUrl, undefined, false),
