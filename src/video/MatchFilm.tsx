@@ -175,21 +175,23 @@ function Inventory({
     </div>
   );
   const group = (
-    label: string,
+    label: string | undefined,
     items: (InventoryItem | null)[],
     key: string,
   ) => (
     <div key={key} data-inventory-group={key} style={{ flexShrink: 0 }}>
-      <div
-        style={{
-          fontSize: compact ? 15 : 18,
-          color: palette.dim,
-          lineHeight: 1,
-          marginBottom: 10,
-        }}
-      >
-        {label}
-      </div>
+      {label && (
+        <div
+          style={{
+            fontSize: compact ? 15 : 18,
+            color: palette.dim,
+            lineHeight: 1,
+            marginBottom: 10,
+          }}
+        >
+          {label}
+        </div>
+      )}
       <div style={{ display: "flex", gap: compact ? 5 : 8 }}>
         {items.map((item, n) => slot(item, `${key}-${n}`))}
       </div>
@@ -206,7 +208,7 @@ function Inventory({
       }}
     >
       {group(
-        inventory.layout === "list" ? "赛末装备记录" : "最终装备",
+        inventory.layout === "list" ? undefined : "最终装备",
         inventory.main,
         "main",
       )}

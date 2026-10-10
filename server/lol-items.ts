@@ -62,13 +62,12 @@ const snapshotSchema = z.object({
   metadata,
   window: windowFrame,
   details: detailFrame,
-  // Some resumed feeds reset all ten K/D/A counters. Keep the raw evidence;
-  // never rewrite either the source frames or the imported match statistics.
+  // Recognize old cached recovery snapshots so they can be rejected. A feed
+  // restart can lose inventory state even when cumulative KDA can be verified.
   counterReset: z
     .object({ before: windowFrame, after: windowFrame })
     .optional(),
 });
-type WindowFrame = z.infer<typeof windowFrame>;
 export type LolInventorySnapshot = z.infer<typeof snapshotSchema>;
 export type LolItemCatalog = {
   version: string;
@@ -91,6 +90,10 @@ export function verifyLolInventory(
 ) {
   assert.equal(match.game, "lol", "仅支持 LoL 单局");
   const snapshot = snapshotSchema.parse(input);
+  assert.ok(
+    !snapshot.counterReset,
+    "这局暂停恢复后的装备记录存在断档，无法确认完整出装",
+  );
   assert.equal(snapshot.window.gameState, "finished", "官方装备记录尚未到终局");
   const start = Date.parse(snapshot.startedAt);
   const end = Date.parse(snapshot.window.rfc460Timestamp);
@@ -114,18 +117,6 @@ export function verifyLolInventory(
       patch(match.patch),
       "比赛版本不一致",
     );
-  const reset = snapshot.counterReset;
-  if (reset) {
-    assert.equal(reset.before.gameState, "paused", "缺少暂停前的计数记录");
-    assert.equal(reset.after.gameState, "in_game", "缺少恢复比赛的计数记录");
-    assert.ok(
-      start < Date.parse(reset.before.rfc460Timestamp) &&
-        Date.parse(reset.before.rfc460Timestamp) <
-          Date.parse(reset.after.rfc460Timestamp) &&
-        Date.parse(reset.after.rfc460Timestamp) < end,
-      "暂停恢复记录的时间顺序不一致",
-    );
-  }
   const result = new Map<number, number[]>();
   const seen = new Set<number>();
   for (const [side, meta, teamKey] of [
@@ -160,44 +151,10 @@ export function verifyLolInventory(
       );
       assert.equal(details.length, 1, "装备选手数据不完整");
       assert.equal(records.length, 1, "终局选手数据不完整");
-      let offset: z.infer<typeof stats> | undefined;
-      if (reset) {
-        const before = reset.before[teamKey].participants.filter(
-          (p) => p.participantId === person.participantId,
-        );
-        const after = reset.after[teamKey].participants.filter(
-          (p) => p.participantId === person.participantId,
-        );
-        assert.equal(before.length, 1, "暂停前选手计数不完整");
-        assert.equal(after.length, 1, "恢复后选手计数不完整");
-        assert.ok(
-          after[0].kills === 0 &&
-            after[0].deaths === 0 &&
-            after[0].assists === 0,
-          "未确认十名选手的 KDA 计数全部重置",
-        );
-        // Independent final statistics must also agree before accepting an
-        // additive counter reset. These are not reset by the resumed feed.
-        assert.ok(records[0].creepScore !== undefined, "恢复后终局补刀缺失");
-        assert.equal(
-          records[0].creepScore,
-          player.lastHits,
-          "恢复后终局补刀不一致",
-        );
-        assert.ok(
-          records[0].totalGold !== undefined &&
-            player.gpm !== undefined &&
-            Math.abs(
-              records[0].totalGold - (player.gpm * match.duration) / 60,
-            ) <= 10,
-          "恢复后终局经济不一致",
-        );
-        offset = before[0];
-      }
       for (const record of [details[0], records[0]])
         for (const key of ["kills", "deaths", "assists"] as const)
           assert.equal(
-            record[key] + (offset?.[key] || 0),
+            record[key],
             player[key],
             `官方终局 KDA 与当前局不一致（${player.name}）`,
           );
@@ -442,85 +399,6 @@ export class LolItems {
       frames: z.array(windowFrame).min(1).parse(response.frames),
     };
   }
-  private async recoverPaused(
-    gameId: string,
-    expected: z.infer<typeof metadata>,
-    before: WindowFrame,
-    until: number,
-  ) {
-    // After a feed restart, queries beyond the end can return the OLD paused
-    // segment. Locate actual recorded ten-second buckets, then the terminal
-    // bucket of the resumed segment. Never accept its last in_game frame.
-    const signal = AbortSignal.timeout(40000);
-    const cache = new Map<number, WindowFrame[]>();
-    const read = async (at: number) => {
-      if (!cache.has(at)) {
-        const response = await this.readWindow(gameId, at, signal);
-        assert.deepEqual(
-          response.metadata,
-          expected,
-          "暂停前后的选手或英雄不一致",
-        );
-        cache.set(
-          at,
-          response.frames.filter((f) => {
-            const time = Date.parse(f.rfc460Timestamp);
-            return time >= at && time < at + 10000;
-          }),
-        );
-      }
-      return cache.get(at)!;
-    };
-    const beginning =
-      Math.floor(Date.parse(before.rfc460Timestamp) / 10000) * 10000 + 10000;
-    let located: number | undefined;
-    // Bounded recovery only: sparse/missing or multiply restarted feeds fail
-    // closed. The timeout also bounds slow providers, not just request count.
-    for (
-      let at = beginning, attempts = 0;
-      at < until && attempts < 64;
-      at += 120000, attempts++
-    ) {
-      if ((await read(at)).length) {
-        located = at;
-        break;
-      }
-    }
-    const incomplete = () =>
-      new Error(
-        `官方接口返回暂停记录（${before.blueTeam.participants.reduce((n, p) => n + p.kills, 0)} : ${before.redTeam.participants.reduce((n, p) => n + p.kills, 0)}），未找到完整的恢复后终局记录`,
-      );
-    if (located === undefined) throw incomplete();
-    let low = beginning,
-      high = located;
-    while (low < high) {
-      const mid = Math.floor((low + high) / 20000) * 10000;
-      if ((await read(mid)).length) high = mid;
-      else low = mid + 10000;
-    }
-    const after = (await read(low))[0];
-    if (
-      !after ||
-      after.gameState !== "in_game" ||
-      [...after.blueTeam.participants, ...after.redTeam.participants].some(
-        (p) => p.kills !== 0 || p.deaths !== 0 || p.assists !== 0,
-      )
-    )
-      throw new Error("暂停后的记录存在断点，无法确认 KDA 计数重置");
-    low = located;
-    high = until;
-    let final = (await read(low)).at(-1)!;
-    while (final.gameState !== "finished" && high - low > 10000) {
-      const mid = Math.floor((low + high) / 20000) * 10000;
-      const frames = await read(mid);
-      if (frames.length) {
-        low = mid;
-        final = frames.at(-1)!;
-      } else high = mid;
-    }
-    if (final.gameState !== "finished") throw incomplete();
-    return { window: final, counterReset: { before, after } };
-  }
   private async fetchSnapshot(match: MatchData): Promise<LolInventorySnapshot> {
     if (!match.gameNumber)
       throw new Error("当前局缺少局数，无法自动核对官方装备。");
@@ -582,18 +460,9 @@ export class LolItems {
           initial.metadata,
           "终局选手或英雄不一致",
         );
-        let final = ending.frames.at(-1)!;
-        let counterReset: LolInventorySnapshot["counterReset"];
-        if (final.gameState === "paused") {
-          const recovered = await this.recoverPaused(
-            gameId,
-            initial.metadata,
-            final,
-            after,
-          );
-          final = recovered.window;
-          counterReset = recovered.counterReset;
-        }
+        const final = ending.frames.at(-1)!;
+        if (final.gameState === "paused")
+          throw new Error("官方接口返回暂停阶段的记录，无法确认完整的终局装备");
         assert.equal(final.gameState, "finished", "官方记录尚未包含终局数据");
         // Fetch the actual final bucket. A request beyond it can return an old
         // segment even when a correctly timestamped finished frame exists.
@@ -619,7 +488,6 @@ export class LolItems {
             metadata: initial.metadata,
             window: final,
             details: detail,
-            ...(counterReset ? { counterReset } : {}),
           },
           champions,
         ).snapshot;
