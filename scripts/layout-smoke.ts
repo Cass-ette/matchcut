@@ -232,9 +232,11 @@ try {
       if (slot === 5 && match.game !== "cs2") {
         const expected = sortedDamage(match)
           .filter((player) => {
-            const position = assignedPositions(match, settings).find(
-              (entry) => entry.player.slot === player.slot,
-            )?.position;
+            const position = match.series
+              ? player.declaredPosition
+              : assignedPositions(match, settings).find(
+                  (entry) => entry.player.slot === player.slot,
+                )?.position;
             return !isSupport(match, position);
           })
           .at(-1);

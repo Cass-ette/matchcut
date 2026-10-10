@@ -20,7 +20,6 @@ import { StatIcon, StatLabel } from "../StatIcon";
 import { PlayerPlaceholder } from "../PlayerPlaceholder";
 import { type InventoryItem, type PlayerInventory } from "../items";
 import {
-  MatchData,
   PlayerData,
   sceneNames,
   sceneSlots,
@@ -425,54 +424,109 @@ function Portrait({
     />
   );
 }
-function ComparisonPortrait({
+function PlayerBadges({
   player,
-  game,
-  color,
+  match,
+  settings,
+  size = 36,
+  showHeroes = true,
+  comparison = false,
+  style,
 }: {
   player: PlayerData;
-  game: MatchData["game"];
-  color: string;
+  match: VideoProps["match"];
+  settings: VideoProps["settings"];
+  size?: number;
+  showHeroes?: boolean;
+  comparison?: boolean;
+  style?: React.CSSProperties;
 }) {
-  const photo = useContext(PlayerVisualContext);
-  const hero = game !== "cs2" && !player.champions;
-  const heroIcon = (size: number) => (
-    <Img
-      data-comparison-hero
-      src={asset(player.image)}
-      alt={player.hero}
-      title={player.hero}
-      style={{
-        width: size,
-        height: size,
-        objectFit: "cover",
-        display: "block",
-      }}
-    />
-  );
+  const color = teamColor(player, settings);
+  const palette = palettes[settings.theme];
+  const teamLogo = match[`${player.side}Logo`];
+  const logoWidth = Math.round(size * 1.27);
+  const heroes =
+    showHeroes && match.game !== "cs2"
+      ? (player.champions ?? [player]).filter((hero) => hero.image)
+      : [];
+  const shown = heroes.slice(0, size >= 36 ? 5 : 3);
   return (
     <div
-      data-comparison-portrait
-      style={{ position: "relative", width: 64, height: 64, flexShrink: 0 }}
+      data-player-badges
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: Math.round(size * 0.3),
+        height: size + 12,
+        boxSizing: "border-box",
+        padding: `5px ${Math.round(size * 0.27)}px`,
+        border: "1px solid " + color + "35",
+        borderRadius: size >= 36 ? 8 : 5,
+        background: `linear-gradient(100deg, ${color}14, ${palette.panel}80)`,
+        verticalAlign: "middle",
+        ...style,
+      }}
     >
-      {hero && !photo ? (
-        heroIcon(64)
-      ) : (
-        <Portrait p={player} width={64} height={64} />
-      )}
-      {hero && photo && (
-        <div
-          style={{
-            position: "absolute",
-            right: -5,
-            bottom: -4,
-            border: "2px solid " + color,
-            borderRadius: 4,
-            overflow: "hidden",
-          }}
-        >
-          {heroIcon(28)}
-        </div>
+      <div
+        data-player-team
+        title={match[player.side]}
+        style={{
+          width: logoWidth,
+          height: size,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color,
+          ...digits,
+          fontSize: fitDisplay(
+            teamInitials(match[player.side]),
+            logoWidth,
+            size * 0.46,
+          ),
+        }}
+      >
+        {teamLogo ? (
+          <Img
+            src={asset(teamLogo)}
+            alt={match[player.side]}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          />
+        ) : (
+          teamInitials(match[player.side])
+        )}
+      </div>
+      {shown.length > 0 && (
+        <>
+          <div
+            style={{ width: 1, height: size * 0.58, background: color + "40" }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            {shown.map((hero) => (
+              <Img
+                key={hero.hero}
+                data-player-hero
+                data-comparison-hero={
+                  (comparison && !player.champions) || undefined
+                }
+                src={asset(hero.image)}
+                alt={hero.hero}
+                title={hero.hero}
+                style={{
+                  width: match.game === "lol" ? size : Math.round(size * 1.7),
+                  height: size,
+                  objectFit: "cover",
+                  borderRadius: 4,
+                }}
+              />
+            ))}
+            {heroes.length > shown.length && (
+              <span style={{ fontSize: 13, color: palette.dim }}>
+                +{heroes.length - shown.length}
+              </span>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -1832,6 +1886,7 @@ function TeamResources(props: Ctx) {
 }
 function RadarScene(props: Ctx) {
   const { match: m, settings: s } = props;
+  const photo = useContext(PlayerVisualContext);
   const p = palettes[s.theme],
     frame = useCurrentFrame();
   const groups = comparisons(m, s),
@@ -1965,18 +2020,12 @@ function RadarScene(props: Ctx) {
             data-player-identity
             style={{ position: "absolute", left: 1105, width: 280, top: 236 }}
           >
-            <div
-              style={{
-                color,
-                fontFamily: display,
-                fontSize: fitDisplay(m[player.side], 280, 20),
-                fontWeight: 700,
-                lineHeight: 1.4,
-                overflowWrap: "anywhere",
-              }}
-            >
-              {m[player.side]}
-            </div>
+            <PlayerBadges
+              player={player}
+              match={m}
+              settings={s}
+              showHeroes={!player.champions}
+            />
             <div
               data-player-name
               style={{
@@ -1993,21 +2042,23 @@ function RadarScene(props: Ctx) {
             >
               {player.name}
             </div>
-            <div
-              style={{
-                fontSize: 20,
-                lineHeight: 1.5,
-                color: p.dim,
-                marginTop: 18,
-                overflowWrap: "anywhere",
-              }}
-            >
-              {player.hero}
-            </div>
+            {(player.champions || m.cs) && (
+              <div
+                style={{
+                  fontSize: 20,
+                  lineHeight: 1.5,
+                  color: p.dim,
+                  marginTop: 18,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {player.hero}
+              </div>
+            )}
             {player.champions && (
               <div
                 style={{
-                  marginTop: 30,
+                  marginTop: 18,
                   display: "grid",
                   gridTemplateColumns: `repeat(${player.champions.length > 6 ? 3 : 2}, minmax(0, 1fr))`,
                   gap: "14px 10px",
@@ -2165,11 +2216,11 @@ function RadarScene(props: Ctx) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <ComparisonPortrait
-                    player={pl}
-                    game={m.game}
-                    color={teamColor(pl, s)}
-                  />
+                  {photo && (
+                    <div style={{ width: 64, height: 64, flexShrink: 0 }}>
+                      <Portrait p={pl} width={64} height={64} />
+                    </div>
+                  )}
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
@@ -2181,6 +2232,14 @@ function RadarScene(props: Ctx) {
                     >
                       {pl.name}
                     </div>
+                    <PlayerBadges
+                      player={pl}
+                      match={m}
+                      settings={s}
+                      size={24}
+                      comparison
+                      style={{ marginTop: 8 }}
+                    />
                     {pl.champions && (
                       <div style={{ fontSize: 16, color: p.dim, marginTop: 6 }}>
                         {pl.hero}
@@ -2259,7 +2318,11 @@ function Damage(props: Ctx) {
       const assigned = assignedPositions(m, s).find(
         (entry) => entry.player.slot === player.slot,
       );
-      return !isSupport(m, assigned?.position);
+      // Individual series totals have separate slots from the role aggregates.
+      return !isSupport(
+        m,
+        m.series ? player.declaredPosition : assigned?.position,
+      );
     }),
     trailing = props.index === 5,
     players = trailing ? ranking.slice(-5) : ranking.slice(0, 5),
@@ -2322,9 +2385,13 @@ function Damage(props: Ctx) {
             ? `${leader.kills} / ${leader.deaths} / ${leader.assists}`
             : num(leader.damage)}
         </div>
-        <div style={{ fontSize: 20, color: p.dim, marginTop: 16 }}>
-          {m[leader.side]} · {m.cs ? "K / D / A" : leader.hero}
-        </div>
+        <PlayerBadges
+          player={leader}
+          match={m}
+          settings={s}
+          size={32}
+          style={{ marginTop: 16 }}
+        />
       </div>
       <div style={{ position: "absolute", left: 820, right: 84, top: 270 }}>
         <div
@@ -2376,7 +2443,7 @@ function Damage(props: Ctx) {
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    marginBottom: 12,
+                    marginBottom: 8,
                     alignItems: "center",
                   }}
                 >
@@ -2399,7 +2466,8 @@ function Damage(props: Ctx) {
                       : num(pl.damage * progress)}
                   </span>
                 </div>
-                <div style={{ height: 8, background: p.line }}>
+                <PlayerBadges player={pl} match={m} settings={s} size={24} />
+                <div style={{ height: 8, background: p.line, marginTop: 9 }}>
                   <div
                     style={{
                       height: "100%",
@@ -2431,7 +2499,6 @@ function MvpScene(props: Ctx) {
   const p = palettes[s.theme];
   const { player, kind } = selection;
   const color = teamColor(player, s);
-  const teamLogo = m[`${player.side}Logo`];
   const shares = playerShares(m, player);
   return (
     <AbsoluteFill>
@@ -2493,63 +2560,13 @@ function MvpScene(props: Ctx) {
         >
           {player.name}
         </div>
-        <div
-          data-mvp-badges
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 16,
-            height: 64,
-            boxSizing: "border-box",
-            padding: "5px 14px",
-            marginTop: 22,
-            border: "1px solid " + color + "35",
-            borderRadius: 8,
-            background: `linear-gradient(100deg, ${color}14, ${p.panel}80)`,
-          }}
-        >
-          <div
-            data-mvp-team
-            title={m[player.side]}
-            style={{
-              width: 66,
-              height: 52,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color,
-              ...digits,
-              fontSize: fitDisplay(teamInitials(m[player.side]), 66, 24),
-            }}
-          >
-            {teamLogo ? (
-              <Img
-                src={asset(teamLogo)}
-                alt={m[player.side]}
-                style={{ width: "100%", height: "100%", objectFit: "contain" }}
-              />
-            ) : (
-              teamInitials(m[player.side])
-            )}
-          </div>
-          {player.image && (
-            <>
-              <div style={{ width: 1, height: 30, background: color + "40" }} />
-              <Img
-                data-mvp-hero
-                src={asset(player.image)}
-                alt={player.hero}
-                title={player.hero}
-                style={{
-                  width: m.game === "lol" ? 52 : 88,
-                  height: 52,
-                  objectFit: "cover",
-                  borderRadius: 4,
-                }}
-              />
-            </>
-          )}
-        </div>
+        <PlayerBadges
+          player={player}
+          match={m}
+          settings={s}
+          size={52}
+          style={{ marginTop: 22 }}
+        />
         <div
           style={{
             display: "grid",
