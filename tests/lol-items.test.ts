@@ -1,122 +1,352 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { normalizeLol } from "../src/lol";
+import { load } from "cheerio";
+import type { MatchData } from "../src/domain";
+import { LolItems, lolInventory } from "../server/lol-items";
 import {
-  LolItems,
-  lolInventory,
-  verifyLolInventory,
-} from "../server/lol-items";
+  GolInventories,
+  parseGolGame,
+  verifyGolInventory,
+  golTournamentCandidates,
+  golSeriesCandidates,
+  golGameLink,
+} from "../server/lol-gol";
 
 const read = async (file: string) => JSON.parse(await readFile(file, "utf8"));
-const raw = await read("data/fixtures/lol/LOLTMNT02_76144.json");
 const champions = await read("data/fixtures/lol/champions.json");
-const snapshot = await read(
-  "data/fixtures/lol/inventories/LOLTMNT02_76144.json",
+const html = await Promise.all(
+  [1, 2].map((g) => readFile(`tests/fixtures/gol/g${g}.html`, "utf8")),
 );
-const catalog = await read("data/fixtures/lol/item-catalogs/14.6.json");
-const pausedGame = await read("tests/fixtures/lol-paused-474169.json");
-const match = () => normalizeLol(raw.rows, champions, raw.fetchedAt);
+const matches: MatchData[] = await Promise.all(
+  [1, 2].map((g) => read(`tests/fixtures/gol/g${g}-match.json`)),
+);
+const urls = [83540, 83541].map(
+  (id) => `https://gol.gg/game/stats/${id}/page-game/`,
+);
+const snapshots = html.map((s, i) => parseGolGame(s, urls[i], matches[i].id));
+const tournaments = await read("tests/fixtures/gol/tournaments.json");
+const matchlist = await readFile("tests/fixtures/gol/matchlist.html", "utf8");
+const paused = await read("tests/fixtures/lol-paused-474169.json");
 
-test("real LoL final frames match all ten players and preserve recorded items, consumables and counts", () => {
-  const { items } = verifyLolInventory(match(), snapshot, champions);
-  assert.deepEqual(
-    items.get(0),
-    [3009, 3152, 3364, 6653, 3137, 3157, 2139, 1058],
-  );
-  assert.equal(items.size, 10);
-  const kiin = lolInventory(items.get(0)!, catalog)!;
-  assert.equal(kiin.layout, "list");
-  assert.equal(kiin.main.length, 8);
-  assert.equal(kiin.main[0]!.name, "轻灵之靴");
-  // The official list omits slot positions; never pad shorter records to six.
-  assert.equal(lolInventory(items.get(1)!, catalog)!.main.length, 3);
-  const keria = lolInventory(items.get(132)!, catalog)!;
-  assert.equal(keria.main.find((i) => i?.id === 2055)!.count, 2);
-  assert.equal(lolInventory([], catalog), undefined);
-  assert.equal(
-    lolInventory([999999], catalog)!.main[0]!.name,
-    "未知装备 #999999",
-  );
-});
-
-test("wrong games, unfinished or mismatched frames, ambiguous players and changed KDA cannot supply equipment", () => {
-  for (const mutate of [
-    (s: any) => {
-      s.window.gameState = "in_game";
-    },
-    (s: any) => {
-      s.startedAt = "2024-04-15T06:25:53.305Z";
-    },
-    (s: any) => {
-      s.metadata.patchVersion = "14.7.1";
-    },
-    (s: any) => {
-      s.details.rfc460Timestamp = s.startedAt;
-    },
-    (s: any) => {
-      s.details.participants[0].kills++;
-    },
-    (s: any) => {
-      s.window.blueTeam.participants[0].assists++;
-    },
-    (s: any) => {
-      s.metadata.blueTeamMetadata.participantMetadata[0].summonerName =
-        "GEN Faker";
-    },
-    (s: any) => {
-      s.metadata.blueTeamMetadata.participantMetadata[0].championId = "Azir";
-    },
-    (s: any) => {
-      s.metadata.blueTeamMetadata.participantMetadata[0].role = "mid";
-    },
-    (s: any) => {
-      s.details.participants[0].participantId = 2;
-    },
-    (s: any) => {
-      s.details.participants.pop();
-    },
-    (s: any) => {
-      s.details.participants[0].items = Array.from(
-        { length: 9 },
-        (_, n) => n + 1,
-      );
-    },
+test("bundled GOL sample reopens offline with every local icon and unchanged statistics", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "matchcut-bundled-items-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const fixture = "data/fixtures/lol/inventories/LOLTMNT02_76144.json";
+  const catalogPath = "data/fixtures/lol/item-catalogs/14.6.json";
+  const catalog = await read(catalogPath);
+  const snapshot = await read(fixture);
+  for (const id of snapshot.players.flatMap(
+    (p: { items: number[] }) => p.items,
+  ))
+    assert.ok(
+      catalog.bundledIds.includes(id),
+      `Sample item ${id} must be bundled`,
+    );
+  // Reproduce a clean installation; ignored local downloads cannot hide gaps.
+  for (const file of [
+    fixture,
+    catalogPath,
+    "data/fixtures/lol/champions.json",
+    ...catalog.bundledIds.map(
+      (id: number) => `public/assets/lol/items/${catalog.version}/${id}.png`,
+    ),
   ]) {
-    const changed = structuredClone(snapshot);
-    mutate(changed);
-    assert.throws(() => verifyLolInventory(match(), changed, champions));
+    const dest = path.join(root, file);
+    await mkdir(path.dirname(dest), { recursive: true });
+    await cp(file, dest);
   }
-});
-
-test("LoL cached equipment loads offline with matching patch icons and leaves statistics intact", async () => {
-  const m = match();
-  const before = structuredClone(m);
+  const { normalizeLol } = await import("../src/lol");
+  const raw = await read("data/fixtures/lol/LOLTMNT02_76144.json");
+  const match = normalizeLol(raw.rows, champions, raw.fetchedAt);
+  const before = structuredClone(match);
   let calls = 0;
-  const library = new LolItems(process.cwd(), async () => {
+  const library = new LolItems(root, async () => {
     calls++;
     throw new Error("offline");
   });
-  assert.equal(await library.applyCached(m), true);
+  assert.equal(await library.applyCached(match), true);
   assert.equal(calls, 0);
-  assert.ok(
-    m.players.every((p) =>
-      p.inventory?.main.every((i) =>
-        i?.image?.startsWith("/assets/lol/items/14.6.1/"),
-      ),
-    ),
+  assert.equal(
+    match.inventorySource?.url,
+    "https://gol.gg/game/stats/57849/page-game/",
   );
-  for (const [i, p] of m.players.entries()) {
-    const { inventory, ...rest } = p;
+  for (const [i, player] of match.players.entries()) {
+    const { inventory, ...rest } = player;
     assert.deepEqual(rest, before.players[i]);
+    assert.ok(inventory?.main.length);
+    for (const item of inventory.main) {
+      assert.ok(item);
+      assert.ok(item?.image?.startsWith("/assets/lol/items/14.6.1/"));
+      assert.equal(
+        (await readFile(path.join(root, "public" + item.image)))
+          .subarray(0, 8)
+          .toString("hex"),
+        "89504e470d0a1a0a",
+      );
+    }
   }
-  assert.match(m.inventorySource!.url, /111561337007371296$/);
 });
 
-test("LoL sync uses a uniquely verified official game, saves atomically, and rejects changes without replacing the snapshot", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "matchcut-lol-items-"));
+test("paused G1 and normal G2 final pages verify all ten players, transformations and separate ward slots", () => {
+  for (const [i, match] of matches.entries()) {
+    const before = structuredClone(match);
+    const { snapshot, items } = verifyGolInventory(
+      match,
+      snapshots[i],
+      champions,
+    );
+    assert.equal(items.size, 10);
+    assert.equal(snapshot.quantityMode, "occupied-slots");
+    assert.deepEqual(match, before);
+    assert.ok([...items.values()].flat().every((id) => id < 1200 || id > 1222));
+    const parus = match.players.find((p) => p.name === "Parus")!;
+    const vampire = match.players.find((p) => p.name === "Vampire")!;
+    if (!i) {
+      assert.deepEqual(
+        items.get(parus.slot),
+        [3364, 3190, 2031, 3869, 3111, 2525, 3067],
+      );
+      assert.deepEqual(
+        items.get(vampire.slot),
+        [3364, 2530, 6620, 3870, 6617, 3158, 2055],
+      );
+      assert.equal(
+        lolInventory(items.get(vampire.slot)!, {
+          version: "16.18.1",
+          items: {},
+        })!.main.find((i) => i?.id === 2055)?.count,
+        undefined,
+        "source does not expose consumable stack counts",
+      );
+    } else {
+      assert.deepEqual(
+        items.get(parus.slot),
+        [3364, 3504, 2065, 3870, 3158, 1004],
+      );
+      assert.deepEqual(
+        items.get(vampire.slot),
+        [3364, 3109, 4642, 3870, 3504, 3158, 1052],
+      );
+      const samd = match.players.find((p) => p.name === "SamD")!;
+      assert.equal(
+        lolInventory(items.get(samd.slot)!, {
+          version: "16.18.1",
+          items: {},
+        })!.main.find((i) => i?.id === 1036)?.count,
+        2,
+      );
+    }
+  }
+});
+
+test("wrong identities, final statistics, teams, dates, patch and ambiguous slots fail closed", () => {
+  for (const mutate of [
+    (s: any) => (s.matchId = "lol-other"),
+    (s: any) => (s.gameNumber = 2),
+    (s: any) => (s.date = "2026-10-01"),
+    (s: any) => (s.duration += 6),
+    (s: any) => (s.patchVersion = "16.19.1"),
+    (s: any) => (s.blueTeam = "other"),
+    (s: any) => (s.winner = "radiant"),
+    (s: any) => (s.players[0].name = "Faker"),
+    (s: any) => (s.players[0].champion = "Azir"),
+    (s: any) => s.players[0].kills++,
+    (s: any) => s.players[0].deaths++,
+    (s: any) => s.players[0].assists++,
+    (s: any) => s.players[0].cs++,
+    (s: any) => (s.players[0].position = 2),
+    (s: any) => s.players.pop(),
+    (s: any) => (s.sourceUrl = "https://example.com/"),
+    (s: any) => (s.players[0].items = [1, 2, 3, 4, 5, 6, 7, 8, 9]),
+  ]) {
+    const s = structuredClone(snapshots[0]);
+    mutate(s);
+    assert.throws(() => verifyGolInventory(matches[0], s, champions));
+  }
+  assert.throws(() => verifyGolInventory(matches[1], snapshots[0], champions));
+  for (const m of [
+    paused.snapshot,
+    { ...paused.snapshot, counterReset: undefined },
+  ])
+    assert.throws(() => verifyGolInventory(paused.match, m, champions));
+});
+
+test("changed/partial pages are rejected; empty real equipment cells are retained", () => {
+  for (const mutate of [
+    ($: ReturnType<typeof load>) =>
+      $("table.playersInfosLine").first().remove(),
+    ($: ReturnType<typeof load>) =>
+      $("table.playersInfosLine")
+        .first()
+        .children("tbody")
+        .children("tr")
+        .first()
+        .remove(),
+    ($: ReturnType<typeof load>) => $(".col-sm-8").first().remove(),
+    ($: ReturnType<typeof load>) =>
+      $(".col-sm-8 img").first().attr("src", "https://other.example/1.png"),
+    ($: ReturnType<typeof load>) =>
+      $('.blue-line-header a[href*="team-stats"]')
+        .parent()
+        .text("JD Gaming - LIVE"),
+    ($: ReturnType<typeof load>) =>
+      $(".game-menu-button-active a").attr(
+        "href",
+        "../game/stats/1/page-game/",
+      ),
+    ($: ReturnType<typeof load>) => $("h1").text(""),
+  ]) {
+    const $ = load(html[0]);
+    mutate($);
+    assert.throws(() => parseGolGame($.html(), urls[0], matches[0].id));
+  }
+  const $ = load(html[0]);
+  $(".col-sm-8").first().empty();
+  assert.deepEqual(
+    parseGolGame($.html(), urls[0], matches[0].id).players[0].items,
+    [],
+  );
+});
+
+test("discovery uses season/date/team matching and actual Game links, never consecutive IDs", () => {
+  assert.deepEqual(golTournamentCandidates(tournaments, matches[0]), [
+    "Demacia Cup Global Invitational 2026",
+  ]);
+  assert.deepEqual(golSeriesCandidates(matchlist, matches[0]), [
+    "https://gol.gg/game/stats/83540/page-summary/",
+  ]);
+  assert.equal(golGameLink(html[0], 2), urls[1]);
+  assert.equal(
+    golGameLink(html[0].replaceAll("83541", "99999"), 2),
+    "https://gol.gg/game/stats/99999/page-game/",
+  );
+  assert.throws(() => golGameLink(html[0], 4));
+  assert.deepEqual(
+    golSeriesCandidates(matchlist, { ...matches[0], radiant: "Other" }),
+    [],
+  );
+  assert.deepEqual(
+    golSeriesCandidates(matchlist, { ...matches[0], date: "2026-10-01" }),
+    [],
+  );
+  assert.throws(() =>
+    golGameLink(
+      html[0].replaceAll(
+        "../game/stats/83541",
+        "https://evil.test/game/stats/83541",
+      ),
+      2,
+    ),
+  );
+});
+
+function sourceFixture() {
+  const requests: string[] = [];
+  let closed = 0,
+    active = 0,
+    maxActive = 0,
+    broken = false,
+    partial = false,
+    ambiguous = false;
+  const source = new GolInventories(async () => {
+    maxActive = Math.max(maxActive, ++active);
+    return {
+      async read(url, season) {
+        requests.push(url);
+        if (season) {
+          assert.equal(season, "S16");
+          return JSON.stringify(tournaments);
+        }
+        if (url.includes("tournament-matchlist"))
+          return ambiguous
+            ? matchlist.replace(
+                "</table>",
+                matchlist.replaceAll("83540", "99999") + "</table>",
+              )
+            : matchlist;
+        if (url.includes("page-summary"))
+          return url.includes("99999")
+            ? html[0].replaceAll("83540", "99999")
+            : html[0];
+        if (broken) throw new Error("source offline");
+        if (partial && url.includes("99999")) return "<html></html>";
+        return url.includes("83541")
+          ? html[1]
+          : url.includes("99999")
+            ? html[0].replaceAll("83540", "99999")
+            : html[0];
+      },
+      async close() {
+        closed++;
+        active--;
+      },
+    };
+  });
+  return {
+    source,
+    requests,
+    get closed() {
+      return closed;
+    },
+    get maxActive() {
+      return maxActive;
+    },
+    set broken(v: boolean) {
+      broken = v;
+    },
+    set ambiguous(v: boolean) {
+      ambiguous = v;
+    },
+    set partial(v: boolean) {
+      partial = v;
+    },
+  };
+}
+
+test("source serializes browser work, reuses discovery, closes sessions and rejects ambiguity", async () => {
+  const fixture = sourceFixture();
+  const result = await Promise.all(
+    matches.map((m) => fixture.source.fetch(m, champions)),
+  );
+  assert.deepEqual(
+    result.map((s) => s.sourceUrl),
+    urls,
+  );
+  assert.equal(fixture.maxActive, 1);
+  assert.equal(fixture.closed, 2);
+  assert.equal(fixture.requests.filter((u) => u.includes("ajax")).length, 1);
+  assert.equal(
+    fixture.requests.filter((u) => u.includes("tournament-matchlist")).length,
+    1,
+  );
+  fixture.broken = true;
+  await assert.rejects(
+    fixture.source.fetch(matches[0], champions),
+    /source offline/,
+  );
+  assert.equal(fixture.closed, 3);
+  const ambiguous = sourceFixture();
+  ambiguous.ambiguous = true;
+  await assert.rejects(ambiguous.source.fetch(matches[0], champions), /多场/);
+  assert.equal(ambiguous.closed, 1);
+});
+
+test("an unreadable alternative candidate cannot prove a unique final inventory", async () => {
+  const fixture = sourceFixture();
+  fixture.ambiguous = true;
+  fixture.partial = true;
+  await assert.rejects(
+    fixture.source.fetch(matches[0], champions),
+    /缺少唯一局数/,
+  );
+  assert.equal(fixture.closed, 1);
+});
+
+test("sync caches verified inventories atomically, deduplicates fetching, works offline and preserves data on failure", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "matchcut-gol-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, "data/fixtures/lol"), { recursive: true });
   await writeFile(
@@ -124,182 +354,69 @@ test("LoL sync uses a uniquely verified official game, saves atomically, and rej
     JSON.stringify(champions),
   );
   const requests: string[] = [];
-  let wrong = false;
-  const request: typeof fetch = async (url, init) => {
-    const address = String(url);
-    requests.push(address);
-    if (address.endsWith("/api/gql")) {
-      assert.equal(JSON.parse(String(init!.body)).variables.hl, "en_US");
+  const request: typeof fetch = async (address) => {
+    const url = String(address);
+    requests.push(url);
+    if (url.endsWith("versions.json"))
+      return Response.json(["lolpatch_7.20", "16.18.1"]);
+    if (url.endsWith("item.json"))
       return Response.json({
-        data: {
-          esports: {
-            events: [
-              {
-                league: { name: "LCK" },
-                startTime: "2024-04-14T06:00:00Z",
-                match: {
-                  games: [
-                    {
-                      id: snapshot.esportsGameId,
-                      state: "completed",
-                      number: 1,
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        },
+        version: "16.18.1",
+        data: { 3364: { name: "神谕透镜" }, 2008: { name: "" } },
       });
-    }
-    if (address.endsWith("/window/" + snapshot.esportsGameId))
-      return Response.json({
-        esportsGameId: snapshot.esportsGameId,
-        gameMetadata: snapshot.metadata,
-        frames: [
-          {
-            ...snapshot.window,
-            rfc460Timestamp: snapshot.startedAt,
-            gameState: "in_game",
-          },
-        ],
-      });
-    if (address.includes("/window/"))
-      return Response.json({
-        esportsGameId: snapshot.esportsGameId,
-        gameMetadata: snapshot.metadata,
-        frames: [snapshot.window],
-      });
-    if (address.includes("/details/")) {
-      const details = structuredClone(snapshot.details);
-      if (wrong) details.participants[0].kills++;
-      return Response.json({ frames: [details] });
-    }
-    if (address.endsWith("/api/versions.json"))
-      return Response.json(["16.20.1", "lolpatch_7.20", "14.6.1"]);
-    if (address.endsWith("/data/zh_CN/item.json")) {
-      assert.ok(address.endsWith("/cdn/14.6.1/data/zh_CN/item.json"));
-      return Response.json({
-        version: "14.6.1",
-        data: { "3009": { name: "轻灵之靴" }, "2008": { name: "" } },
-      });
-    }
-    // Optional images may be unavailable without losing equipment IDs.
     return new Response("offline", { status: 503 });
   };
-  const library = new LolItems(root, request);
-  const m = match();
-  await library.sync(m);
-  assert.equal(requests.filter((r) => r.endsWith("/api/gql")).length, 1);
+  let calls = 0,
+    wrong = false;
+  const source = {
+    async fetch() {
+      calls++;
+      const s = structuredClone(snapshots[0]);
+      if (wrong) s.players[0].kills++;
+      return s;
+    },
+  };
+  const library = new LolItems(root, request, source);
+  const m = structuredClone(matches[0]),
+    m2 = structuredClone(matches[0]);
+  await Promise.all([library.sync(m), library.sync(m2)]);
+  assert.equal(calls, 1);
   assert.ok(m.players.every((p) => p.inventory));
-  assert.equal(m.players[0].inventory!.main[0]!.name, "轻灵之靴");
+  assert.equal(m.players[1].inventory!.main[0]!.name, "神谕透镜");
   assert.equal(
-    (await read(path.join(root, "data/cache/lol/item-catalogs/14.6.json")))
+    (await read(path.join(root, "data/cache/lol/item-catalogs/16.18.json")))
       .items[2008].name,
     "未知装备 #2008",
   );
   assert.ok(m.players.every((p) => p.inventory!.main.every((i) => !i?.image)));
-  const file = path.join(
-    root,
-    "data/cache/lol/inventories/LOLTMNT02_76144.json",
-  );
-  const saved = await readFile(file, "utf8");
-  wrong = true;
-  await assert.rejects(
-    library.sync(match()),
-    /官方终局 KDA 与当前局不一致（Kiin）/,
-  );
-  assert.equal(await readFile(file, "utf8"), saved);
-  requests.length = 0;
-  assert.equal(await new LolItems(root, request).applyCached(match()), true);
-  assert.equal(requests.length, 0);
-});
-
-test("matching cumulative KDA cannot make a restarted, incomplete inventory valid", () => {
-  const m = structuredClone(pausedGame.match);
-  const s = pausedGame.snapshot;
-  for (const [i, player] of m.players.entries()) {
-    const team = i < 5 ? "blueTeam" : "redTeam";
-    const before = s.counterReset.before[team].participants[i % 5];
-    const final = s.window[team].participants[i % 5];
-    for (const key of ["kills", "deaths", "assists"])
-      assert.equal(before[key] + final[key], player[key]);
+  assert.equal(m.inventorySource?.url, urls[0]);
+  assert.equal(m.inventorySource?.timestamp, undefined);
+  for (const [i, p] of m.players.entries()) {
+    const { inventory, ...rest } = p;
+    assert.deepEqual(rest, matches[0].players[i]);
   }
-  assert.deepEqual(s.details.participants[9].items, [2525, 3067]);
-  assert.throws(() => verifyLolInventory(m, s, champions), /装备记录存在断档/);
-  // Removing the legacy marker must not bypass the strict final KDA check.
-  const unmarked = structuredClone(s);
-  delete unmarked.counterReset;
-  assert.throws(() => verifyLolInventory(m, unmarked, champions), /终局 KDA/);
-  assert.deepEqual(m, pausedGame.match);
-});
-
-test("old restart caches are ignored offline; paused feeds cannot reattach or overwrite them", async (t) => {
-  const root = await mkdtemp(
-    path.join(os.tmpdir(), "matchcut-lol-discontinuous-"),
-  );
-  t.after(() => rm(root, { recursive: true, force: true }));
-  await mkdir(path.join(root, "data/fixtures/lol"), { recursive: true });
-  await writeFile(
-    path.join(root, "data/fixtures/lol/champions.json"),
-    JSON.stringify(champions),
-  );
   const file = path.join(
     root,
     "data/cache/lol/inventories/LOLTMNT02_474169.json",
   );
-  await mkdir(path.dirname(file), { recursive: true });
-  const saved = JSON.stringify(pausedGame.snapshot);
-  await writeFile(file, saved);
-  const s = pausedGame.snapshot;
-  const requests: string[] = [];
-  const request: typeof fetch = async (address) => {
-    const url = new URL(String(address));
-    requests.push(url.href);
-    if (url.pathname.endsWith("/api/gql"))
-      return Response.json({
-        data: {
-          esports: {
-            events: [
-              {
-                league: { name: "DCGI" },
-                startTime: "2026-10-08T11:00:00Z",
-                match: {
-                  games: [
-                    { id: s.esportsGameId, state: "completed", number: 1 },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      });
-    assert.ok(
-      url.pathname.includes("/window/"),
-      "unverified games must not fetch equipment or images",
-    );
-    return Response.json({
-      esportsGameId: s.esportsGameId,
-      gameMetadata: s.metadata,
-      frames: [
-        url.searchParams.has("startingTime")
-          ? s.counterReset.before
-          : {
-              ...s.counterReset.after,
-              rfc460Timestamp: s.startedAt,
-            },
-      ],
-    });
-  };
-  const library = new LolItems(root, request);
-  const m = structuredClone(pausedGame.match);
-  assert.equal(await library.applyCached(m), false);
-  assert.equal(requests.length, 0);
-  assert.ok(m.players.every((p: any) => !p.inventory));
-  assert.equal(m.inventorySource, undefined);
-  assert.deepEqual(m, pausedGame.match);
-  await assert.rejects(library.sync(m), /暂停阶段.*无法确认完整的终局装备/);
-  assert.deepEqual(m, pausedGame.match);
-  assert.equal(requests.length, 3);
+  const saved = await readFile(file, "utf8"),
+    before = structuredClone(m);
+  wrong = true;
+  await assert.rejects(library.sync(m), /终局 KDA/);
+  assert.deepEqual(m, before);
   assert.equal(await readFile(file, "utf8"), saved);
+  requests.length = 0;
+  const reopened = structuredClone(matches[0]);
+  assert.equal(
+    await new LolItems(root, request, source).applyCached(reopened),
+    true,
+  );
+  assert.equal(requests.length, 0);
+  assert.deepEqual(reopened, m);
+  // All older live-feed inventories are incomplete as a source, even without resets.
+  await writeFile(file, JSON.stringify(paused.snapshot));
+  const legacy = structuredClone(matches[0]);
+  assert.equal(await library.applyCached(legacy), false);
+  assert.deepEqual(legacy, matches[0]);
+  assert.equal(requests.length, 0);
 });

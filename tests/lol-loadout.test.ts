@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { LolLoadouts, verifyLolRunes } from "../server/lol-loadout";
-import { verifyLolInventory } from "../server/lol-items";
+import { verifyGolInventory } from "../server/lol-gol";
 import { normalizeLol } from "../src/lol";
 import { summarizeLolSeries } from "../src/series";
 import { fetchRuneCatalog } from "../server/lol-rune-catalog";
@@ -87,9 +87,8 @@ test("start runes remain verifiable after a pause reset while incomplete equipme
     result.get(0)?.perks,
     [8230, 8226, 8210, 8237, 8444, 8242, 5008, 5011],
   );
-  assert.throws(
-    () => verifyLolInventory(paused.match, paused.snapshot, champions),
-    /断档/,
+  assert.throws(() =>
+    verifyGolInventory(paused.match, paused.snapshot, champions),
   );
   for (const change of [
     (s: any) => (s.details.participants[0].participantId = 2),
@@ -184,17 +183,29 @@ test("official rune sync is independent of final inventory; spells save by game 
         !url.includes("startingTime"),
         "runes must not require the final frame",
       );
-      const s = await read(
-        "data/fixtures/lol/inventories/LOLTMNT02_76144.json",
-      );
+      // Runes use the official opening frame, independently of equipment data.
+      const participants = (team: typeof snapshot.metadata.blueTeamMetadata) =>
+        team.participantMetadata.map(
+          ({ participantId }: { participantId: number }) => ({
+            participantId,
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+          }),
+        );
       return Response.json({
         esportsGameId: snapshot.esportsGameId,
         gameMetadata: snapshot.metadata,
         frames: [
           {
-            ...s.window,
             rfc460Timestamp: snapshot.startedAt,
             gameState: "in_game",
+            blueTeam: {
+              participants: participants(snapshot.metadata.blueTeamMetadata),
+            },
+            redTeam: {
+              participants: participants(snapshot.metadata.redTeamMetadata),
+            },
           },
         ],
       });
