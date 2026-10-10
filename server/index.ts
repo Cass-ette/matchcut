@@ -57,7 +57,8 @@ import {
   ensureMediaIndex,
 } from "./media-index";
 import { Thumbnails } from "./thumbnails";
-import { lolItems } from "./lol-items";
+import { lolLoadouts } from "./lol-loadout";
+import { syncLolGameLoadout } from "./lol-game-loadout";
 
 const loadAnyMatch = (id: string) =>
   id.startsWith("cs2-")
@@ -400,10 +401,28 @@ app.get(
   wrap(async (_req, res) => res.json(await listLolMatches())),
 );
 app.post(
-  "/api/lol/items/:id",
+  ["/api/lol/loadout/:id", "/api/lol/items/:id"],
   wrap(async (req, res) => {
     const { match } = await loadLolMatch(String(req.params.id));
-    await lolItems.sync(match);
+    res.json(await syncLolGameLoadout(match));
+  }),
+);
+app.get(
+  "/api/lol/loadout-catalog",
+  wrap(async (req, res) => {
+    const patch = z
+      .string()
+      .regex(/^\d+\.\d+(?:\.\d+)*$/)
+      .optional()
+      .parse(req.query.patch);
+    res.json(await lolLoadouts.catalog(patch));
+  }),
+);
+app.put(
+  "/api/lol/spells/:id",
+  wrap(async (req, res) => {
+    const { match } = await loadLolMatch(String(req.params.id));
+    await lolLoadouts.setSpells(match, req.body);
     res.json({ match });
   }),
 );

@@ -1630,3 +1630,53 @@ select {
   border-radius: 50%;
   background: #f06e76;
 }
+
+.loadout-editor {
+  margin-top: 16px;
+  border-top: 1px solid var(--line, #2b3443);
+  padding-top: 14px;
+}
+.loadout-editor summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+.loadout-editor p {
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.75;
+}
+.loadout-player {
+  padding: 12px 0;
+  border-bottom: 1px solid #ffffff12;
+}
+.loadout-player b {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.loadout-player small {
+  font-weight: 400;
+  opacity: 0.65;
+}
+.spell-selects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.spell-selects select {
+  min-width: 0;
+  width: 100%;
+}
+.editor-runes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+.editor-runes img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}

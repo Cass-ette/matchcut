@@ -66,6 +66,7 @@ import { groupLolSeries, LolSummary } from "./series";
 import type { CsSummary } from "./cs";
 import "./style.css";
 import { AssetAdmin } from "./AssetAdmin";
+import { LolLoadoutEditor } from "./LolLoadoutEditor";
 
 type Job = {
   id: string;
@@ -152,6 +153,11 @@ function App() {
   const [csSearch, setCsSearch] = useState("");
   const [csImporting, setCsImporting] = useState(false);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [loadoutReport, setLoadoutReport] = useState<{
+    matchId: string;
+    message: string;
+    warnings: string[];
+  } | null>(null);
   const [bgmTracks, setBgmTracks] = useState<BgmTrack[]>([]);
   const bgmInput = useRef<HTMLInputElement>(null),
     bgmPreview = useRef<HTMLAudioElement>(null);
@@ -360,18 +366,27 @@ function App() {
       setLoading(false);
     }
   }
-  async function syncLolItems() {
+  async function syncLolLoadout() {
     if (!match || match.game !== "lol" || match.series) return;
     setLoading(true);
     setItemsLoading(true);
     setError("");
+    setLoadoutReport(null);
     try {
-      const data = await api("/api/lol/items/" + encodeURIComponent(match.id), {
-        method: "POST",
-      });
+      const data = await api(
+        "/api/lol/loadout/" + encodeURIComponent(match.id),
+        {
+          method: "POST",
+        },
+      );
       setMatch(data.match);
       setResult(null);
-      setToast("已核对并保存这局的赛末装备记录");
+      setToast(data.message);
+      setLoadoutReport({
+        matchId: match.id,
+        message: data.message,
+        warnings: data.warnings ?? [],
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1014,7 +1029,7 @@ function App() {
                   <button
                     className="csv-import"
                     disabled={loading || busy}
-                    onClick={() => void syncLolItems()}
+                    onClick={() => void syncLolLoadout()}
                   >
                     {itemsLoading ? (
                       <LoaderCircle size={16} className="spin" />
@@ -1022,23 +1037,43 @@ function App() {
                       <RefreshCw size={16} />
                     )}
                     {itemsLoading
-                      ? "正在核对装备…"
-                      : match.inventorySource
-                        ? "更新赛末装备"
-                        : "获取赛末装备"}
+                      ? "正在核对装备与符文…"
+                      : match.inventorySource && match.runeSource
+                        ? "更新装备与符文"
+                        : "获取装备与符文"}
                   </button>
                   <p>
-                    {match.inventorySource
-                      ? "装备已保存在本机，可离线使用。"
-                      : "从官方赛事记录核对当前局，首次获取需要联网。"}
-                    包含饰品与消耗品，按官方列表展示。
+                    一次获取当前局的装备与符文，核对后保存在本机，可离线使用。
                   </p>
+                  {loadoutReport?.matchId === match.id && (
+                    <div className="loadout-report" role="status">
+                      <p>{loadoutReport.message}</p>
+                      {loadoutReport.warnings.map((warning) => (
+                        <p key={warning}>{warning}</p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {importReport && (
                 <p className="import-report" role="status">
                   {importReport}
                 </p>
+              )}
+              {!match.series && (
+                <LolLoadoutEditor
+                  key={match.id}
+                  match={match}
+                  disabled={loading || busy}
+                  onChange={(next) => {
+                    setMatch((current) =>
+                      current?.id === next.id && !current.series
+                        ? next
+                        : current,
+                    );
+                    setResult(null);
+                  }}
+                />
               )}
             </div>
           ) : (
@@ -1523,7 +1558,7 @@ function App() {
               {cs
                 ? "K / D / A 排序：击杀多优先，其次死亡少，最后助攻多。雷达：击杀、ADR（每回合对敌生命伤害）、KAST、爆头率、首杀、道具伤害。缺失指标显示 —。"
                 : lol
-                  ? "上 / 野 / 中 / 下：击杀、助攻、总经济/分、补刀/分、伤害/分、参团率。辅助：助攻、参团率、视野得分、放置守卫、排除守卫、购买控制守卫。"
+                  ? "完整数据对所有位置展示；位置只决定雷达和重点数字。上 / 野 / 中 / 下突出伤害、经济和参团；辅助突出视野、参团和守卫。占比以同队五人总量为分母，经济占比按总经济计算。"
                   : "一至三号位：击杀、助攻、经济、经验、伤害、推塔。四、五号位：助攻、参战率、观察守卫、岗哨守卫、眩晕时长、治疗。"}
               {match.series
                 ? "系列赛按同位置累计，轮换选手共同计入该位置；每分钟数值用总量除以出场时长，参团率按出场局队伍击杀加权。伤害排行按选手分别累计。"

@@ -14,6 +14,7 @@ import {
 } from "remotion";
 import "@fontsource/orbitron/latin-700.css";
 import "@fontsource/orbitron/latin-900.css";
+import { playerShares, playerStats } from "../player-stats";
 import { teamInitials } from "../media";
 import { StatIcon, StatLabel } from "../StatIcon";
 import { PlayerPlaceholder } from "../PlayerPlaceholder";
@@ -113,13 +114,21 @@ function Inventory({
   inventory,
   palette,
   compact = false,
+  narrow = false,
 }: {
   inventory: PlayerInventory;
   palette: typeof palettes.ember;
   compact?: boolean;
+  narrow?: boolean;
 }) {
-  const width = compact ? 58 : 76;
-  const height = compact ? 42 : 55;
+  const width = narrow
+    ? inventory.layout === "list"
+      ? 36
+      : 32
+    : compact
+      ? 58
+      : 76;
+  const height = narrow ? 32 : compact ? 42 : 55;
   const slot = (item: InventoryItem | null, key: string) => (
     <div
       key={key}
@@ -192,7 +201,7 @@ function Inventory({
           {label}
         </div>
       )}
-      <div style={{ display: "flex", gap: compact ? 5 : 8 }}>
+      <div style={{ display: "flex", gap: narrow ? 3 : compact ? 5 : 8 }}>
         {items.map((item, n) => slot(item, `${key}-${n}`))}
       </div>
     </div>
@@ -203,7 +212,7 @@ function Inventory({
       data-inventory-layout={inventory.layout || "slots"}
       style={{
         display: "flex",
-        gap: compact ? 18 : 24,
+        gap: narrow ? 8 : compact ? 18 : 24,
         alignItems: "flex-start",
       }}
     >
@@ -215,6 +224,128 @@ function Inventory({
       {inventory.neutral && group("中立", [inventory.neutral], "neutral")}
       {inventory.enhancement &&
         group("附魔", [inventory.enhancement], "enhancement")}
+    </div>
+  );
+}
+function Loadout({
+  player,
+  palette,
+  compact = false,
+}: {
+  player: PlayerData;
+  palette: typeof palettes.ember;
+  compact?: boolean;
+}) {
+  const loadout = player.lolLoadout;
+  if (!loadout?.runes && !loadout?.spells?.some(Boolean)) return null;
+  const size = compact ? 22 : 32;
+  const icon = (
+    entry: { id: number; name: string; image?: string } | null,
+    key: string,
+    spell = false,
+  ) => (
+    <div
+      key={key}
+      title={entry?.name}
+      data-loadout-icon
+      style={{
+        width: size,
+        height: size,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        flexShrink: 0,
+        borderRadius: spell ? 3 : "50%",
+        background: spell ? palette.panel : undefined,
+        overflow: "hidden",
+      }}
+    >
+      {entry?.image ? (
+        <Img
+          src={asset(entry.image)}
+          alt={entry.name}
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+        />
+      ) : (
+        <span style={{ fontSize: compact ? 8 : 11, color: palette.dim }}>
+          {entry ? "#" + entry.id : "—"}
+        </span>
+      )}
+    </div>
+  );
+  return (
+    <div
+      data-player-loadout
+      style={{ display: "flex", gap: compact ? 3 : 7, alignItems: "center" }}
+    >
+      {loadout.spells?.some(Boolean) && (
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+            paddingRight: compact ? 5 : 12,
+            borderRight: "1px solid " + palette.line,
+          }}
+        >
+          {loadout.spells.map((s, i) => icon(s, "spell" + i, true))}
+        </div>
+      )}
+      {loadout.runes && (
+        <>
+          {icon(loadout.runes.primary, "primary")}
+          {loadout.runes.perks
+            .slice(0, 4)
+            .map((r, i) => icon(r, "primary" + i))}
+          {icon(loadout.runes.secondary, "secondary")}
+          {loadout.runes.perks.slice(4).map((r, i) => icon(r, "secondary" + i))}
+        </>
+      )}
+    </div>
+  );
+}
+function FullStats({
+  match,
+  player,
+  palette,
+}: {
+  match: VideoProps["match"];
+  player: PlayerData;
+  palette: typeof palettes.ember;
+}) {
+  return (
+    <div
+      data-full-player-stats
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+        gap: "6px 18px",
+      }}
+    >
+      {playerStats(match, player).map((stat) => (
+        <div
+          key={stat.label}
+          style={{
+            minWidth: 0,
+            borderTop: "1px solid " + palette.line,
+            paddingTop: 3,
+          }}
+        >
+          <div style={{ fontSize: 13, lineHeight: "15px", color: palette.dim }}>
+            {stat.label}
+          </div>
+          <div
+            style={{
+              fontFamily: display,
+              fontSize: 17,
+              fontWeight: 700,
+              lineHeight: "20px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {stat.value}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1606,9 +1737,7 @@ function RadarScene(props: Ctx) {
   const player = focus[mode === 0 ? 0 : 1],
     color = teamColor(player, s);
   const kda = `${player.kills} / ${player.deaths} / ${player.assists}`;
-  const teamTotal = m.players
-    .filter((x) => x.side === player.side)
-    .reduce((sum, x) => sum + x.damage, 0);
+  const shares = playerShares(m, player);
   const inventory =
     !m.series && m.game !== "cs2" ? player.inventory : undefined;
   return (
@@ -1697,7 +1826,7 @@ function RadarScene(props: Ctx) {
               left: 1415,
               top: 211,
               width: 420,
-              height: inventory ? 400 : 500,
+              height: m.series ? 360 : 270,
               opacity: 0.94,
               filter:
                 s.effects === "arena"
@@ -1794,9 +1923,16 @@ function RadarScene(props: Ctx) {
               </div>
             )}
           </div>
+          {!m.series && m.game === "lol" && (
+            <div
+              style={{ position: "absolute", left: 1105, right: 85, top: 488 }}
+            >
+              <Loadout player={player} palette={p} />
+            </div>
+          )}
           {inventory && (
             <div
-              style={{ position: "absolute", left: 1105, right: 85, top: 638 }}
+              style={{ position: "absolute", left: 1105, right: 85, top: 530 }}
             >
               <Inventory inventory={inventory} palette={p} />
             </div>
@@ -1805,13 +1941,13 @@ function RadarScene(props: Ctx) {
             data-player-stats
             style={{
               position: "absolute",
-              top: 734,
+              top: 634,
               left: 1105,
               right: 85,
               boxSizing: "border-box",
               background:
                 "linear-gradient(90deg," + p.bg + "f0," + p.bg + "66)",
-              padding: "24px 32px 26px",
+              padding: "14px 26px 16px",
               borderTop: "2px solid " + color,
               display: "grid",
               gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)",
@@ -1870,12 +2006,14 @@ function RadarScene(props: Ctx) {
               >
                 {support
                   ? axisValue(participation(m, player), "%")
-                  : teamTotal
-                    ? ((100 * player.damage) / teamTotal).toFixed(1)
-                    : "0.0"}
-                {!support && <span style={{ fontSize: 25 }}>%</span>}
+                  : axisValue(shares.damage, "%")}
               </div>
             </div>
+          </div>
+          <div
+            style={{ position: "absolute", top: 754, left: 1105, right: 85 }}
+          >
+            <FullStats match={m} player={player} palette={p} />
           </div>
         </div>
       ) : (
@@ -1888,67 +2026,100 @@ function RadarScene(props: Ctx) {
             opacity: enter(local, 0, 18),
           }}
         >
-          <Tag color={p.dim}>{comparison.label} / HEAD TO HEAD</Tag>
-          {focus.map((pl) => (
-            <div
-              key={pl.slot}
-              data-player-comparison
-              style={{
-                marginTop: 30,
-                borderLeft: "4px solid " + teamColor(pl, s),
-                padding: "20px 28px 22px",
-                boxSizing: "border-box",
-                background:
-                  "linear-gradient(90deg," +
-                  teamColor(pl, s) +
-                  "0e,transparent)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-                <Portrait p={pl} width={124} height={78} />
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontFamily: display,
-                      fontSize: fit(pl.name, 480, 43),
-                      fontWeight: 900,
-                      color: teamColor(pl, s),
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {pl.name}
-                  </div>
-                  <div style={{ fontSize: 19, color: p.dim, marginTop: 7 }}>
-                    {m[pl.side]} · {pl.hero}
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}
+          >
+            {focus.map((pl) => (
+              <div
+                key={pl.slot}
+                data-player-comparison
+                style={{
+                  minWidth: 0,
+                  borderTop: "3px solid " + teamColor(pl, s),
+                  paddingTop: 15,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <Portrait p={pl} width={72} height={58} />
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontFamily: display,
+                        fontWeight: 900,
+                        fontSize: fit(pl.name, 230, 29),
+                        color: teamColor(pl, s),
+                      }}
+                    >
+                      {pl.name}
+                    </div>
+                    <div style={{ fontSize: 14, color: p.dim, marginTop: 6 }}>
+                      {pl.hero}
+                    </div>
                   </div>
                 </div>
+                {!m.series && m.game === "lol" && (
+                  <div style={{ marginTop: 14 }}>
+                    <Loadout player={pl} palette={p} compact />
+                  </div>
+                )}
+                {!m.series && m.game !== "cs2" && pl.inventory && (
+                  <div style={{ marginTop: 14 }}>
+                    <Inventory
+                      inventory={pl.inventory}
+                      palette={p}
+                      compact
+                      narrow
+                    />
+                  </div>
+                )}
               </div>
+            ))}
+          </div>
+          <div
+            data-full-comparison
+            style={{ marginTop: 22, borderTop: "1px solid " + p.line }}
+          >
+            {playerStats(m, focus[0]).map((stat, i) => (
               <div
+                key={stat.label}
                 data-comparison-stats
-                style={{ fontFamily: mono, fontSize: 26, marginTop: 17 }}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 150px 1fr",
+                  alignItems: "center",
+                  minHeight: 29,
+                  borderBottom: "1px solid " + p.line + "70",
+                }}
               >
-                {pl.kills} / {pl.deaths} / {pl.assists}{" "}
-                <span style={{ fontSize: 18, color: p.dim }}>KDA</span>
-                <span style={{ marginLeft: 40 }}>
-                  {support
-                    ? axisValue(m.game === "lol" ? pl.vision : pl.healing)
-                    : num(pl.damage)}{" "}
-                  <span style={{ fontSize: 18, color: p.dim }}>
-                    {support
-                      ? m.game === "lol"
-                        ? "视野得分"
-                        : "治疗"
-                      : "伤害"}
-                  </span>
+                <span
+                  style={{
+                    fontFamily: display,
+                    fontWeight: 700,
+                    fontSize: 19,
+                    color: s.accent,
+                  }}
+                >
+                  {stat.value}
+                </span>
+                <span
+                  style={{ fontSize: 17, textAlign: "center", color: p.dim }}
+                >
+                  {stat.label}
+                </span>
+                <span
+                  style={{
+                    fontFamily: display,
+                    fontWeight: 700,
+                    fontSize: 19,
+                    textAlign: "right",
+                    color: s.secondary,
+                  }}
+                >
+                  {playerStats(m, focus[1])[i].value}
                 </span>
               </div>
-              {!m.series && m.game !== "cs2" && pl.inventory && (
-                <div style={{ marginTop: 24 }}>
-                  <Inventory inventory={pl.inventory} palette={p} compact />
-                </div>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </AbsoluteFill>

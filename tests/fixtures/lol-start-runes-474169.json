@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "esportsGameId": "117133830114188941",
+  "startedAt": "2026-10-08T10:53:14.998Z",
+  "fetchedAt": "2026-10-10T09:28:19.955Z",
+  "metadata": {
+    "patchVersion": "16.18.819.1060",
+    "blueTeamMetadata": {
+      "esportsTeamId": "99566404852189289",
+      "participantMetadata": [
+        {
+          "participantId": 1,
+          "esportsPlayerId": "109784472606547975",
+          "summonerName": "JDG Xiaoxu",
+          "championId": "Galio",
+          "role": "top"
+        },
+        {
+          "participantId": 2,
+          "esportsPlayerId": "111726354998441726",
+          "summonerName": "JDG xiaofang",
+          "championId": "Qiyana",
+          "role": "jungle"
+        },
+        {
+          "participantId": 3,
+          "esportsPlayerId": "101388912814667094",
+          "summonerName": "JDG Angel",
+          "championId": "Locke",
+          "role": "mid"
+        },
+        {
+          "participantId": 4,
+          "esportsPlayerId": "101388912814247335",
+          "summonerName": "JDG GALA",
+          "championId": "Ashe",
+          "role": "bottom"
+        },
+        {
+          "participantId": 5,
+          "esportsPlayerId": "111726305547204259",
+          "summonerName": "JDG Vampire",
+          "championId": "Seraphine",
+          "role": "support"
+        }
+      ]
+    },
+    "redTeamMetadata": {
+      "esportsTeamId": "114868016111590239",
+      "participantMetadata": [
+        {
+          "participantId": 6,
+          "esportsPlayerId": "105700869624784693",
+          "summonerName": "NAVI Maynter",
+          "championId": "Rumble",
+          "role": "top"
+        },
+        {
+          "participantId": 7,
+          "esportsPlayerId": "105548731617719496",
+          "summonerName": "NAVI Rhilech",
+          "championId": "JarvanIV",
+          "role": "jungle"
+        },
+        {
+          "participantId": 8,
+          "esportsPlayerId": "107840393299826151",
+          "summonerName": "NAVI Poby",
+          "championId": "Ryze",
+          "role": "mid"
+        },
+        {
+          "participantId": 9,
+          "esportsPlayerId": "104287359934240404",
+          "summonerName": "NAVI SamD",
+          "championId": "Jhin",
+          "role": "bottom"
+        },
+        {
+          "participantId": 10,
+          "esportsPlayerId": "103805069759346933",
+          "summonerName": "NAVI Parus",
+          "championId": "Nautilus",
+          "role": "support"
+        }
+      ]
+    }
+  },
+  "details": {
+    "rfc460Timestamp": "2026-10-08T10:53:14.998Z",
+    "participants": [
+      {
+        "participantId": 1,
+        "perkMetadata": {
+          "styleId": 8200,
+          "subStyleId": 8400,
+          "perks": [
+            8230,
+            8226,
+            8210,
+            8237,
+            8444,
+            8242,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 2,
+        "perkMetadata": {
+          "styleId": 8300,
+          "subStyleId": 8100,
+          "perks": [
+            8369,
+            8321,
+            8313,
+            8347,
+            8143,
+            8135,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 3,
+        "perkMetadata": {
+          "styleId": 8100,
+          "subStyleId": 8400,
+          "perks": [
+            8112,
+            8143,
+            8137,
+            8105,
+            8453,
+            8473,
+            5008,
+            5010,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 4,
+        "perkMetadata": {
+          "styleId": 8000,
+          "subStyleId": 8300,
+          "perks": [
+            8008,
+            8009,
+            9103,
+            8017,
+            8321,
+            8410,
+            5005,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 5,
+        "perkMetadata": {
+          "styleId": 8400,
+          "subStyleId": 8300,
+          "perks": [
+            8465,
+            8463,
+            8473,
+            8453,
+            8304,
+            8347,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 6,
+        "perkMetadata": {
+          "styleId": 8200,
+          "subStyleId": 8300,
+          "perks": [
+            8992,
+            8275,
+            8234,
+            8237,
+            8313,
+            8347,
+            5007,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 7,
+        "perkMetadata": {
+          "styleId": 8000,
+          "subStyleId": 8300,
+          "perks": [
+            8010,
+            9111,
+            9104,
+            8017,
+            8347,
+            8321,
+            5005,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 8,
+        "perkMetadata": {
+          "styleId": 8200,
+          "subStyleId": 8400,
+          "perks": [
+            8992,
+            8226,
+            8234,
+            8237,
+            8473,
+            8242,
+            5005,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 9,
+        "perkMetadata": {
+          "styleId": 8000,
+          "subStyleId": 8300,
+          "perks": [
+            8021,
+            8009,
+            9103,
+            8017,
+            8321,
+            8347,
+            5008,
+            5011
+          ]
+        }
+      },
+      {
+        "participantId": 10,
+        "perkMetadata": {
+          "styleId": 8400,
+          "subStyleId": 8300,
+          "perks": [
+            8439,
+            8401,
+            8444,
+            8242,
+            8306,
+            8347,
+            5005,
+            5010,
+            5011
+          ]
+        }
+      }
+    ]
+  }
+}

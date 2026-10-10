@@ -35,7 +35,7 @@ const team = z.object({
     )
     .length(5),
 });
-const metadata = z.object({
+export const lolMetadataSchema = z.object({
   patchVersion: z.string().regex(/^\d+\.\d+\./),
   blueTeamMetadata: team,
   redTeamMetadata: team,
@@ -59,7 +59,7 @@ const snapshotSchema = z.object({
   esportsGameId: id,
   fetchedAt: time,
   startedAt: time,
-  metadata,
+  metadata: lolMetadataSchema,
   window: windowFrame,
   details: detailFrame,
   // Recognize old cached recovery snapshots so they can be rejected. A feed
@@ -80,6 +80,57 @@ const canonical = (s: string) =>
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, "");
 const roles = { top: 1, jungle: 2, mid: 3, bottom: 4, support: 5 } as const;
+
+export function verifyLolParticipants(
+  match: MatchData,
+  input: unknown,
+  startedAt: string,
+  champions: ChampionCatalog,
+) {
+  assert.equal(match.game, "lol", "仅支持 LoL 单局");
+  assert.ok(
+    Math.abs(Date.parse(startedAt) - Date.parse(match.date)) < 5 * 60000,
+    "官方比赛时间与当前局不一致",
+  );
+  const meta = lolMetadataSchema.parse(input);
+  if (match.patch)
+    assert.equal(
+      patch(meta.patchVersion),
+      patch(match.patch),
+      "比赛版本不一致",
+    );
+  const result = new Map<number, MatchData["players"][number]>();
+  for (const [side, team] of [
+    ["radiant", meta.blueTeamMetadata],
+    ["dire", meta.redTeamMetadata],
+  ] as const) {
+    for (const person of team.participantMetadata) {
+      assert.ok(!result.has(person.participantId), "官方选手编号重复");
+      const player = match.players.find(
+        (p) => p.side === side && p.declaredPosition === roles[person.role],
+      );
+      assert.ok(
+        player && ![...result.values()].includes(player),
+        "选手位置不一致",
+      );
+      // Remove only the one explicit team tag, preserving spaces in nicknames.
+      const name = person.summonerName.replace(/^\S+\s+/, "");
+      assert.ok(
+        canonical(player.name) === canonical(name) ||
+          canonical(player.name) === canonical(person.summonerName),
+        "选手名称不一致",
+      );
+      assert.equal(
+        championFor(person.championId, champions)?.key,
+        String(player.heroId),
+        "选手英雄不一致",
+      );
+      result.set(person.participantId, player);
+    }
+  }
+  assert.equal(result.size, 10, "十名选手未完整核对");
+  return result;
+}
 
 // Bind every participant by side + recorded role + exact name + champion.
 // The ten final K/D/A values must also match the imported game.
@@ -117,6 +168,12 @@ export function verifyLolInventory(
       patch(match.patch),
       "比赛版本不一致",
     );
+  const participants = verifyLolParticipants(
+    match,
+    snapshot.metadata,
+    snapshot.startedAt,
+    champions,
+  );
   const result = new Map<number, number[]>();
   const seen = new Set<number>();
   for (const [side, meta, teamKey] of [
@@ -127,22 +184,7 @@ export function verifyLolInventory(
     for (const person of meta.participantMetadata) {
       assert.ok(!seen.has(person.participantId), "官方选手编号重复");
       seen.add(person.participantId);
-      const player = match.players.find(
-        (p) => p.side === side && p.declaredPosition === roles[person.role],
-      );
-      assert.ok(player && !result.has(player.slot), "选手位置不一致");
-      // Remove only the one explicit team tag, preserving spaces in nicknames.
-      const name = person.summonerName.replace(/^\S+\s+/, "");
-      assert.ok(
-        canonical(player.name) === canonical(name) ||
-          canonical(player.name) === canonical(person.summonerName),
-        "选手名称不一致",
-      );
-      assert.equal(
-        championFor(person.championId, champions)?.key,
-        String(player.heroId),
-        "选手英雄不一致",
-      );
+      const player = participants.get(person.participantId)!;
       const details = snapshot.details.participants.filter(
         (p) => p.participantId === person.participantId,
       );
@@ -216,7 +258,7 @@ export class LolItems {
         ...(init?.signal ? [init.signal] : []),
       ]),
     });
-    if (!r.ok) throw new Error(`官方装备数据暂不可用（HTTP ${r.status}）`);
+    if (!r.ok) throw new Error(`官方赛事数据暂不可用（HTTP ${r.status}）`);
     return r.json();
   }
   private async champions(): Promise<ChampionCatalog> {
@@ -385,7 +427,7 @@ export class LolItems {
       timestamp: snapshot.details.rfc460Timestamp,
     };
   }
-  private async readWindow(gameId: string, at?: number, signal?: AbortSignal) {
+  async readWindow(gameId: string, at?: number, signal?: AbortSignal) {
     const suffix =
       at === undefined
         ? ""
@@ -395,14 +437,13 @@ export class LolItems {
     });
     assert.equal(response.esportsGameId, gameId, "官方记录的比赛编号不一致");
     return {
-      metadata: metadata.parse(response.gameMetadata),
+      metadata: lolMetadataSchema.parse(response.gameMetadata),
       frames: z.array(windowFrame).min(1).parse(response.frames),
     };
   }
-  private async fetchSnapshot(match: MatchData): Promise<LolInventorySnapshot> {
+  async candidates(match: MatchData): Promise<{ id: string }[]> {
     if (!match.gameNumber)
-      throw new Error("当前局缺少局数，无法自动核对官方装备。");
-    const champions = await this.champions();
+      throw new Error("当前局缺少局数，无法自动核对官方比赛记录。");
     const date = Date.parse(match.date);
     const variables = {
       hl: "en_US",
@@ -442,7 +483,13 @@ export class LolItems {
         ),
       );
     if (!games.length || games.length > 12)
-      throw new Error("官方赛程中没有可准确核对的单局装备，当前统计保持不变。");
+      throw new Error("官方赛程中没有可准确核对的单局记录，当前统计保持不变。");
+    return games.map((game: any) => ({ id: id.parse(game.id) }));
+  }
+  private async fetchSnapshot(match: MatchData): Promise<LolInventorySnapshot> {
+    const games = await this.candidates(match);
+    const champions = await this.champions();
+    const date = Date.parse(match.date);
     const verified: LolInventorySnapshot[] = [];
     const failures: string[] = [];
     for (const game of games) {

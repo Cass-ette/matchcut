@@ -106,6 +106,13 @@ function totalPlayer(
     deaths: sum(values("deaths"))!,
     assists: sum(values("assists"))!,
     damage: sum(values("damage"))!,
+    damageTaken: sum(values("damageTaken")),
+    totalGold: sum(values("totalGold")),
+    teamTotals: {
+      damage: sum(entries.map((e) => e.player.teamTotals?.damage))!,
+      damageTaken: sum(entries.map((e) => e.player.teamTotals?.damageTaken)),
+      totalGold: sum(entries.map((e) => e.player.teamTotals?.totalGold)),
+    },
     lastHits: sum(values("lastHits"))!,
     gpm:
       entries.reduce((n, e) => n + e.player.gpm! * e.game.duration, 0) /

@@ -182,6 +182,14 @@ export type PlayerData = {
   playerImage?: string;
   playerArtwork?: string;
   inventory?: PlayerInventory;
+  lolLoadout?: {
+    spells?: [LolLoadoutIcon | null, LolLoadoutIcon | null];
+    runes?: {
+      primary: LolLoadoutIcon;
+      secondary: LolLoadoutIcon;
+      perks: LolLoadoutIcon[];
+    };
+  };
   side: "radiant" | "dire";
   kills: number;
   deaths: number;
@@ -189,6 +197,10 @@ export type PlayerData = {
   gpm?: number;
   xpm?: number;
   damage: number;
+  damageTaken?: number;
+  totalGold?: number;
+  // Denominators from the games this player appeared in, also used for substitutes.
+  teamTotals?: { damage: number; damageTaken?: number; totalGold?: number };
   tower?: number;
   lastHits?: number;
   steamId?: string;
@@ -214,6 +226,7 @@ export type PlayerData = {
   teamKills?: number;
   champions?: { hero: string; image: string; games: number }[];
 };
+export type LolLoadoutIcon = { id: number; name: string; image?: string };
 export type MatchData = {
   game?: Game;
   id: string;
@@ -238,6 +251,7 @@ export type MatchData = {
   gameNumber?: number;
   patch?: string;
   inventorySource?: { url: string; fetchedAt: string; timestamp: string };
+  runeSource?: { url: string; fetchedAt: string; timestamp: string };
   cs?: {
     version: "CS2" | "CSGO";
     map: string;

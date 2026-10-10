@@ -112,6 +112,11 @@ export function normalizeLol(
         assists,
         gpm: number(row, "totalgold")! / (duration / 60),
         damage: number(row, "damagetochampions")!,
+        damageTaken:
+          number(row, "damagetakenperminute", true) === undefined
+            ? undefined
+            : (number(row, "damagetakenperminute", true)! * duration) / 60,
+        totalGold: number(row, "totalgold")!,
         lastHits: number(row, "total cs")!,
         obs: number(row, "wardsplaced", true),
         wardsKilled: number(row, "wardskilled", true),
@@ -126,6 +131,16 @@ export function normalizeLol(
     ["dire", red],
   ] as const) {
     const sidePlayers = players.filter((p) => p.side === side);
+    const total = (key: "damage" | "damageTaken" | "totalGold") =>
+      sidePlayers.every((p) => p[key] !== undefined)
+        ? sidePlayers.reduce((n, p) => n + p[key]!, 0)
+        : undefined;
+    for (const p of sidePlayers)
+      p.teamTotals = {
+        damage: total("damage")!,
+        damageTaken: total("damageTaken"),
+        totalGold: total("totalGold"),
+      };
     if (
       sidePlayers.reduce((sum, p) => sum + p.kills, 0) !==
         number(team, "kills") ||

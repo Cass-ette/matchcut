@@ -73,3 +73,7 @@ data/preferences-lol.json
 !/public/assets/renders/106.png
 
 data/preferences-cs2.json
+
+/public/assets/lol/loadouts/*/*.png
+!/public/assets/lol/loadouts/14.6/*.png
+!/public/assets/lol/loadouts/16.18/*.png

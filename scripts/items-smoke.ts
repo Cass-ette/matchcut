@@ -37,6 +37,19 @@ const lol = process.argv.includes("--live-items")
     })()
   : await load("/api/matches/" + encodeURIComponent(lolId));
 assert.ok(lol.players.every((p) => p.inventory));
+if (process.argv.includes("--loadouts")) {
+  const catalog = await (
+    await fetch(base + "/api/lol/loadout-catalog?patch=14.6")
+  ).json();
+  // Synthetic manual selections exercise the layout without saving user data.
+  for (const p of lol.players) {
+    assert.ok(p.lolLoadout?.runes);
+    p.lolLoadout!.spells = [
+      catalog.spells.find((s: any) => s.id === 4),
+      catalog.spells.find((s: any) => s.id === 12),
+    ];
+  }
+}
 const series = await load("/api/lol/series/lol-LOLTMNT02_76144");
 const cs = await load("/api/matches/cs2-monte-og-anubis");
 const unavailable = structuredClone(dota);
@@ -77,6 +90,29 @@ async function check(page: Page, expected: number, mode: number) {
     const caption = document
       .querySelector("[data-film-caption]")
       ?.getBoundingClientRect();
+    for (const selector of [
+      "[data-full-player-stats]",
+      "[data-full-comparison]",
+      "[data-player-loadout]",
+    ]) {
+      for (const element of document.querySelectorAll(selector)) {
+        const bounds = element.getBoundingClientRect();
+        if (bounds.right > film.right || bounds.bottom > film.bottom)
+          failures.push(selector + " exceeds film");
+        if (caption && overlaps(bounds, caption))
+          failures.push(selector + " overlaps caption");
+        for (const img of element.querySelectorAll("img"))
+          if (!img.complete || !img.naturalWidth)
+            failures.push("Loadout icon failed");
+        for (const inventory of document.querySelectorAll(
+          "[data-player-inventory]",
+        ))
+          if (overlaps(bounds, inventory.getBoundingClientRect()))
+            failures.push(selector + " overlaps equipment");
+        if (element.scrollWidth > element.clientWidth + 1)
+          failures.push(selector + " overflows");
+      }
+    }
     for (const row of document.querySelectorAll("[data-player-inventory]")) {
       const bounds = row.getBoundingClientRect();
       if (bounds.right > film.right || bounds.bottom > film.bottom)
@@ -104,6 +140,7 @@ async function check(page: Page, expected: number, mode: number) {
           "[data-hero-art]",
           "[data-player-identity]",
           "[data-player-stats]",
+          "[data-full-player-stats]",
         ]) {
           const element = document.querySelector(
             selector === "[data-hero-art]" ? "[data-player-art]" : selector,
@@ -180,6 +217,26 @@ try {
                 ? 2
                 : 1;
           await check(page, expected, mode);
+          if (name === "lol" && process.argv.includes("--loadouts")) {
+            assert.equal(
+              await page.locator("[data-player-loadout]").count(),
+              mode === 2 ? 2 : 1,
+            );
+            const metrics = await page
+              .locator(
+                mode === 2
+                  ? "[data-full-comparison]"
+                  : "[data-full-player-stats]",
+              )
+              .innerText();
+            for (const label of [
+              "伤害占比",
+              "承伤占比",
+              "经济占比",
+              "视野得分",
+            ])
+              assert.ok(metrics.includes(label));
+          }
           if (group === 0 || (group === 3 && mode === 0)) {
             const label = `${name}-${visual}-${group}-${mode}`;
             await page
@@ -196,16 +253,22 @@ try {
       }
       if (name === "lol" && visual === "hero") {
         let requests = 0;
-        await page.route("**/api/lol/items/**", (route) =>
+        await page.route("**/api/lol/loadout/**", (route) =>
           ++requests === 1
             ? route.fulfill({
                 status: 503,
                 json: { error: "测试：官方记录暂不可用" },
               })
-            : route.fulfill({ json: { match } }),
+            : route.fulfill({
+                json: {
+                  match,
+                  message: "已核对并保存装备与符文",
+                  warnings: [],
+                },
+              }),
         );
         await page
-          .getByRole("button", { name: "更新赛末装备", exact: true })
+          .getByRole("button", { name: "更新装备与符文", exact: true })
           .click();
         await page
           .getByRole("alert")
@@ -213,13 +276,65 @@ try {
           .waitFor();
         await check(page, 2, 2);
         await page
-          .getByRole("button", { name: "更新赛末装备", exact: true })
+          .getByRole("button", { name: "更新装备与符文", exact: true })
           .click();
         await page
-          .getByText("已核对并保存这局的赛末装备记录", { exact: true })
+          .locator(".loadout-report")
+          .getByText("已核对并保存装备与符文", { exact: true })
           .waitFor();
         assert.equal(requests, 2);
         await check(page, 2, 2);
+        await page.route("**/api/lol/loadout/**", (route) =>
+          route.fulfill({
+            json: {
+              match,
+              message: "已核对并保存符文",
+              warnings: ["装备：暂停导致记录不完整"],
+            },
+          }),
+        );
+        await page
+          .getByRole("button", { name: "更新装备与符文", exact: true })
+          .click();
+        await page
+          .locator(".loadout-report")
+          .getByText("装备：暂停导致记录不完整", { exact: true })
+          .waitFor();
+        await check(page, 2, 2);
+        if (process.argv.includes("--loadouts")) {
+          await page.locator(".loadout-editor summary").click();
+          const catalog = await (
+            await fetch(base + "/api/lol/loadout-catalog?patch=14.6")
+          ).json();
+          const edited = structuredClone(match);
+          let spellRequests = 0;
+          await page.route("**/api/lol/spells/**", (route) => {
+            spellRequests++;
+            assert.deepEqual(route.request().postDataJSON(), {
+              slot: match.players[0].slot,
+              spells: [6, 12],
+            });
+            edited.players[0].lolLoadout!.spells![0] = catalog.spells.find(
+              (s: any) => s.id === 6,
+            );
+            return route.fulfill({ json: { match: edited } });
+          });
+          const input = page.getByLabel(
+            match.players[0].name + " 召唤师技能 1",
+            { exact: true },
+          );
+          await input.selectOption("6");
+          await page.waitForFunction(
+            () =>
+              !document.querySelector<HTMLSelectElement>(
+                ".spell-selects select",
+              )?.disabled,
+          );
+          assert.equal(await input.inputValue(), "6");
+          assert.equal(spellRequests, 1);
+          assert.equal(await page.locator(".editor-runes").count(), 10);
+          await check(page, 2, 2);
+        }
       }
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 1100 });
