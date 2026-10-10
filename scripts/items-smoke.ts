@@ -21,17 +21,21 @@ async function load(url: string): Promise<ReportData> {
   return (await response.json()).match;
 }
 const dota = await load("/api/matches/9035078952");
+const lolId =
+  process.argv
+    .find((arg) => arg.startsWith("--lol-match="))
+    ?.slice("--lol-match=".length) || "lol-LOLTMNT02_76144";
 const lol = process.argv.includes("--live-items")
   ? await (async () => {
       const response = await fetch(
-        base + "/api/lol/items/lol-LOLTMNT02_76144",
+        base + "/api/lol/items/" + encodeURIComponent(lolId),
         { method: "POST" },
       );
       const data = await response.json();
       assert.ok(response.ok, data.error);
       return data.match as ReportData;
     })()
-  : await load("/api/matches/lol-LOLTMNT02_76144");
+  : await load("/api/matches/" + encodeURIComponent(lolId));
 assert.ok(lol.players.every((p) => p.inventory));
 const series = await load("/api/lol/series/lol-LOLTMNT02_76144");
 const cs = await load("/api/matches/cs2-monte-og-anubis");
