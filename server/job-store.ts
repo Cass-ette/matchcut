@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Job } from "./render";
+import { isActiveJob } from "../src/job-status";
 
 export function jobWriter(folder: string, job: Job) {
   let queue = Promise.resolve();
@@ -32,7 +33,7 @@ export async function restoreJobs(output: string) {
     } catch {
       continue;
     }
-    if (!["done", "error"].includes(job.status)) {
+    if (isActiveJob(job.status)) {
       job.status = "error";
       job.error = "上次后台服务已退出，生成已中断。设置已保留，请重新生成。";
       job.message = job.error;

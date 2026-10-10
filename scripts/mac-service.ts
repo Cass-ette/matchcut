@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { isActiveJob } from "../src/job-status";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const cache = path.join(root, ".cache");
@@ -86,8 +87,10 @@ async function main() {
     if (!response.ok)
       throw new Error("无法确认任务状态，请恢复连接后再停止服务。");
     const jobs = (await response.json()) as { status: string }[];
-    if (jobs.some((job) => ["preparing", "rendering"].includes(job.status))) {
-      throw new Error("视频正在生成，已保留后台服务。请等生成完成后再停止。");
+    if (jobs.some((job) => isActiveJob(job.status))) {
+      throw new Error(
+        "还有生成或暂停中的任务。请在工作台点「停止任务」，或等生成完成后再关闭服务。",
+      );
     }
     execFileSync("/bin/launchctl", ["bootout", target], { stdio: "inherit" });
     console.log("Matchcut 已停止。");

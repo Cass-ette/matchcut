@@ -646,6 +646,23 @@ svg {
 .progress-track.disconnected > div {
   background: var(--muted);
 }
+.job-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 0;
+}
+.job-controls > span {
+  flex: 1 1 220px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.job-controls .stop-job {
+  color: #ee9b8c;
+  border-color: #704038;
+}
 .inspector .panel-title > svg {
   margin-left: auto;
   color: var(--muted);

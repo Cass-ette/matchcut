@@ -1,14 +1,13 @@
 import os from "node:os";
 import { browserPath } from "./browser";
 import { bundle } from "@remotion/bundler";
-import {
-  renderMedia,
-  renderStill,
-  selectComposition,
-} from "@remotion/renderer";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { renderStill, selectComposition } from "@remotion/renderer";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveBgm } from "./audio-source";
+import { RenderCancelled, RenderControl } from "./render-control";
+import { renderChunks } from "./render-chunks";
+import type { JobStatus } from "../src/job-status";
 import {
   FPS,
   exportResolutions,
@@ -42,7 +41,7 @@ export function renderConcurrency(resolution?: Settings["resolution"]) {
 }
 export type Job = {
   id: string;
-  status: "preparing" | "rendering" | "done" | "error";
+  status: JobStatus;
   progress: number;
   message: string;
   createdAt: string;
@@ -51,6 +50,7 @@ export type Job = {
     renderedFrames: number;
     encodedFrames: number;
     totalFrames: number;
+    savedFrames?: number;
     stage: "rendering" | "encoding" | "muxing";
   };
   matchId?: string;
@@ -87,17 +87,20 @@ export async function runRender(
   settings: Settings,
   origin: string,
   update: () => Promise<void>,
+  control = new RenderControl(job, update),
 ) {
   const folder = path.join(root, "output", job.id);
   await mkdir(folder, { recursive: true });
   try {
+    await control.checkpoint();
     settings = settingsSchema.parse(settings);
     job.matchId = match.id;
     job.title = settings.headline;
     job.message = "按阅读节奏编排字幕与镜头";
     job.progress = 5;
     await update();
-    const bgmTrack = await resolveBgm(settings);
+    const bgmTrack = await control.run(async () => resolveBgm(settings));
+    await control.checkpoint();
     const props = previewProps(match, settings, bgmTrack);
     const { segments, captions } = props;
     job.props = props;
@@ -111,20 +114,24 @@ export async function runRender(
     await update();
     // Rebundle after collecting assets so newly downloaded portraits are included.
     invalidateBundle();
-    const serveUrl = await prepareBundle();
+    const serveUrl = await control.run(() => prepareBundle());
     const browserExecutable = await browserPath();
-    const composition = await selectComposition({
-      serveUrl,
-      id: "MatchFilm",
-      inputProps: props,
-      browserExecutable,
-    });
+    const composition = await control.run(() =>
+      selectComposition({
+        serveUrl,
+        id: "MatchFilm",
+        inputProps: props,
+        browserExecutable,
+      }),
+    );
+    await control.checkpoint();
     job.status = "rendering";
     const frameCount = composition.durationInFrames;
     job.renderProgress = {
       renderedFrames: 0,
       encodedFrames: 0,
       totalFrames: frameCount,
+      savedFrames: 0,
       stage: "rendering",
     };
     job.message = `渲染画面 0 / ${frameCount} 帧`;
@@ -133,74 +140,46 @@ export async function runRender(
     console.info(
       `[${new Date().toISOString()}] [job:${job.id}] 开始 ${job.width}×${job.height}，${frameCount} 帧，并发 ${renderConcurrency(settings.resolution)}`,
     );
-    let lastProgress = 0;
-    let lastLog = 0;
-    await renderMedia({
-      composition,
-      serveUrl,
-      codec: "h264",
-      outputLocation: path.join(folder, "matchcut.mp4"),
-      inputProps: props,
-      browserExecutable,
-      concurrency: renderConcurrency(settings.resolution),
-      crf: 19,
-      pixelFormat: "yuv420p",
-      muted: !bgmTrack,
-      ...(bgmTrack ? { audioCodec: "aac" as const, audioBitrate: "192k" } : {}),
-      scale: output.scale,
-      timeoutInMilliseconds: 120000,
-      onProgress: ({
-        progress,
-        renderedFrames,
-        encodedFrames,
-        stitchStage,
-      }) => {
-        job.progress = 20 + Math.floor(progress * 72);
-        const stage =
-          stitchStage === "muxing"
-            ? "muxing"
-            : renderedFrames < frameCount
-              ? "rendering"
-              : "encoding";
-        job.renderProgress = {
-          renderedFrames,
-          encodedFrames,
-          totalFrames: frameCount,
-          stage,
-        };
-        job.message =
-          stage === "muxing"
-            ? "合并音视频"
-            : stage === "rendering"
-              ? `渲染画面 ${renderedFrames} / ${frameCount} 帧 · 已编码 ${encodedFrames} 帧`
-              : `编码视频 ${encodedFrames} / ${frameCount} 帧`;
-        if (Date.now() - lastProgress > 1500) {
-          lastProgress = Date.now();
-          void update().catch((error) =>
-            console.error(`[job:${job.id}] 保存进度失败：`, error),
-          );
-        }
-        if (Date.now() - lastLog > 30_000) {
-          lastLog = Date.now();
-          console.info(
-            `[${new Date().toISOString()}] [job:${job.id}] ${job.progress}% ${job.message}`,
-          );
-        }
+    await renderChunks(
+      {
+        composition,
+        serveUrl,
+        codec: "h264",
+        outputLocation: path.join(folder, "matchcut.mp4"),
+        inputProps: props,
+        browserExecutable,
+        concurrency: renderConcurrency(settings.resolution),
+        crf: 19,
+        pixelFormat: "yuv420p",
+        muted: !bgmTrack,
+        ...(bgmTrack
+          ? { audioCodec: "aac" as const, audioBitrate: "192k" }
+          : {}),
+        scale: output.scale,
+        timeoutInMilliseconds: 120000,
       },
-    });
+      job,
+      control,
+      update,
+    );
+    await control.checkpoint();
     job.progress = 94;
     job.message = "导出封面、字幕与数据档案";
     await update();
-    await renderStill({
-      composition,
-      serveUrl,
-      output: path.join(folder, "cover.png"),
-      inputProps: props,
-      frame: Math.min(80, segments[0].frames - 20),
-      imageFormat: "png",
-      browserExecutable,
-      scale: output.scale,
-    });
+    await control.run((cancelSignal) =>
+      renderStill({
+        cancelSignal,
+        composition,
+        serveUrl,
+        output: path.join(folder, "cover.png"),
+        inputProps: props,
+        frame: Math.min(80, segments[0].frames - 20),
+        imageFormat: "png",
+        browserExecutable,
+        scale: output.scale,
+      }),
+    );
+    await control.checkpoint();
     await writeFile(path.join(folder, "captions.srt"), srt(captions));
     await writeFile(
       path.join(folder, "project.json"),
@@ -299,6 +278,7 @@ export async function runRender(
           .join("\n\n") +
         "\n",
     );
+    await control.checkpoint();
     job.files = Object.fromEntries(
       [
         "matchcut.mp4",
@@ -317,6 +297,16 @@ export async function runRender(
       `[${new Date().toISOString()}] [job:${job.id}] ${job.message}`,
     );
   } catch (e) {
+    if (e instanceof RenderCancelled) {
+      job.status = "cancelled";
+      job.message = e.message;
+      delete job.error;
+      await update();
+      console.info(
+        `[${new Date().toISOString()}] [job:${job.id}] ${job.message}`,
+      );
+      return;
+    }
     console.error(
       `[${new Date().toISOString()}] [job:${job.id}] 渲染失败：`,
       e,

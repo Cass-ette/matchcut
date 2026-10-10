@@ -20,6 +20,7 @@ import {
   FolderDown,
   LoaderCircle,
   Palette,
+  Pause,
   Play,
   Plus,
   Radio,
@@ -27,6 +28,7 @@ import {
   Settings2,
   SlidersHorizontal,
   Sparkles,
+  Square,
   Type,
   Upload,
   WandSparkles,
@@ -72,6 +74,7 @@ import type { CsSummary } from "./cs";
 import "./style.css";
 import { AssetAdmin } from "./AssetAdmin";
 import { LolLoadoutEditor } from "./LolLoadoutEditor";
+import { isActiveJob } from "./job-status";
 
 type Job = {
   id: string;
@@ -143,6 +146,7 @@ function App() {
   const [loading, setLoading] = useState(false),
     [job, setJob] = useState<Job | null>(null),
     [jobDisconnected, setJobDisconnected] = useState(false),
+    [jobAction, setJobAction] = useState(""),
     [jobs, setJobs] = useState<Job[]>([]),
     [tab, setTab] = useState<"design" | "script">("design");
   const [scene, setScene] = useState(0),
@@ -179,7 +183,11 @@ function App() {
     m.series
       ? reportModeOf(m) + ":" + m.series.games.map((g) => g.id).join(",")
       : "game:" + m.id;
-  const busy = Boolean(job && !["done", "error"].includes(job.status));
+  const busy = Boolean(job && isActiveJob(job.status));
+  const jobPaused = job?.status === "paused";
+  const jobTransitioning =
+    job?.status === "pausing" || job?.status === "cancelling";
+  const jobActionVersion = useRef(0);
   useEffect(() => {
     api(
       "/api/bootstrap?game=" +
@@ -214,9 +222,7 @@ function App() {
         setTeamId(prefs?.teamId || "");
         setJobs(data.jobs);
         setBgmTracks(data.bgmTracks || []);
-        const active = data.jobs.find(
-          (j: Job) => !["done", "error"].includes(j.status),
-        );
+        const active = data.jobs.find((j: Job) => isActiveJob(j.status));
         if (active) setJob(active);
         ready.current = true;
       })
@@ -281,6 +287,7 @@ function App() {
     setJobDisconnected(false);
     const poll = async () => {
       let finished = false;
+      const actionVersion = jobActionVersion.current;
       try {
         const value = await api<Job>("/api/jobs/" + job.id, {
           signal: AbortSignal.any([
@@ -288,7 +295,7 @@ function App() {
             AbortSignal.timeout(8000),
           ]),
         });
-        if (stopped) return;
+        if (stopped || actionVersion !== jobActionVersion.current) return;
         pollErrors = 0;
         setJobDisconnected(false);
         setJob(value);
@@ -320,6 +327,14 @@ function App() {
             ...current.filter((j) => j.id !== value.id),
           ]);
           setError(value.error || value.message);
+        }
+        if (value.status === "cancelled") {
+          finished = true;
+          setJobs((current) => [
+            value,
+            ...current.filter((j) => j.id !== value.id),
+          ]);
+          setToast("任务已停止，可以修改设置后重新生成");
         }
       } catch {
         if (++pollErrors >= 3 && !stopped) setJobDisconnected(true);
@@ -591,6 +606,27 @@ function App() {
       );
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+  async function controlJob(action: "pause" | "resume" | "cancel") {
+    if (!job || !busy || jobAction) return;
+    setJobAction(action);
+    setError("");
+    jobActionVersion.current++;
+    try {
+      const next = await api<Job>(`/api/jobs/${job.id}/${action}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(10_000),
+      });
+      setJob(next);
+      setJobDisconnected(false);
+    } catch (error) {
+      setError(
+        "操作未确认：" + (error as Error).message + "。正在同步任务状态。",
+      );
+    } finally {
+      jobActionVersion.current++;
+      setJobAction("");
     }
   }
   function seek(index: number) {
@@ -1682,7 +1718,13 @@ function App() {
                 {busy
                   ? jobDisconnected
                     ? "与渲染服务的连接已中断"
-                    : "正在渲染赛后节目"
+                    : jobPaused
+                      ? "生成任务已暂停"
+                      : job?.status === "cancelling"
+                        ? "正在停止任务"
+                        : job?.status === "pausing"
+                          ? "正在暂停任务"
+                          : "正在渲染赛后节目"
                   : "导出横屏成片"}
               </b>
               <span>
@@ -1690,7 +1732,9 @@ function App() {
                   ? jobDisconnected
                     ? `最后进度 ${job?.progress}%${job?.updatedAt ? " · " + new Date(job.updatedAt).toLocaleTimeString() : ""}。正在自动重连；若服务已关闭，请双击「启动 Matchcut.command」。`
                     : job?.message
-                  : "MP4 视频 + 封面 + 字幕 + 数据档案"}
+                  : job?.status === "cancelled"
+                    ? "任务已停止，比赛和设置已保留"
+                    : "MP4 视频 + 封面 + 字幕 + 数据档案"}
               </span>
             </div>
             <button
@@ -1700,6 +1744,8 @@ function App() {
             >
               {busy && jobDisconnected ? (
                 <WifiOff size={18} />
+              ) : jobPaused ? (
+                <Pause size={18} />
               ) : busy ? (
                 <LoaderCircle size={18} className="spin" />
               ) : (
@@ -1708,15 +1754,52 @@ function App() {
               {busy
                 ? jobDisconnected
                   ? "连接中断"
-                  : "生成中 " + job?.progress + "%"
+                  : jobPaused
+                    ? "已暂停 " + job?.progress + "%"
+                    : job?.status === "pausing"
+                      ? "正在暂停"
+                      : job?.status === "cancelling"
+                        ? "正在停止"
+                        : "生成中 " + job?.progress + "%"
                 : "一键生成视频"}
               {!busy && <ArrowRight size={17} />}
             </button>
           </div>
           {busy && (
+            <div className="job-controls">
+              <span>
+                {jobPaused
+                  ? "继续时从已保存片段接着生成"
+                  : "选错比赛或设置？可以随时暂停或停止"}
+              </span>
+              <button
+                className="outline-button"
+                disabled={!!jobAction || jobDisconnected || jobTransitioning}
+                onClick={() => void controlJob(jobPaused ? "resume" : "pause")}
+              >
+                {jobPaused ? <Play size={14} /> : <Pause size={14} />}
+                {jobAction === "resume"
+                  ? "正在继续…"
+                  : jobPaused
+                    ? "继续生成"
+                    : "暂停任务"}
+              </button>
+              <button
+                className="outline-button stop-job"
+                disabled={
+                  !!jobAction || jobDisconnected || job?.status === "cancelling"
+                }
+                onClick={() => void controlJob("cancel")}
+              >
+                <Square size={13} /> 停止任务
+              </button>
+            </div>
+          )}
+          {busy && (
             <div
               className={
-                "progress-track" + (jobDisconnected ? " disconnected" : "")
+                "progress-track" +
+                (jobDisconnected || jobPaused ? " disconnected" : "")
               }
               role="progressbar"
               aria-valuenow={job?.progress}

@@ -22,6 +22,8 @@ import {
 } from "./source";
 import { Job, runRender } from "./render";
 import { jobWriter, restoreJobs } from "./job-store";
+import { RenderCancelled, RenderControl } from "./render-control";
+import { isActiveJob } from "../src/job-status";
 import {
   csLibrary,
   listCsMatches,
@@ -101,6 +103,7 @@ app.use(express.json({ limit: "128kb" }));
 app.use("/assets", express.static(path.join(root, "public/assets")));
 app.use("/output", express.static(path.join(root, "output")));
 const jobs = await restoreJobs(path.join(root, "output"));
+const renderControls = new Map<string, RenderControl>();
 const wrap =
   (fn: (req: express.Request, res: express.Response) => Promise<any>) =>
   (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -493,6 +496,26 @@ app.get("/api/jobs/:id", (req, res) => {
   }
   res.json(job);
 });
+app.post(
+  "/api/jobs/:id/:action",
+  wrap(async (req, res) => {
+    const action = z
+      .enum(["pause", "resume", "cancel"])
+      .parse(req.params.action);
+    const job = jobs.get(String(req.params.id));
+    if (!job) {
+      res.status(404).json({ error: "未找到生成任务。" });
+      return;
+    }
+    const control = renderControls.get(job.id);
+    if (!control || !isActiveJob(job.status)) {
+      res.status(409).json({ error: "任务已结束，无法继续控制。" });
+      return;
+    }
+    await control[action]();
+    res.json(job);
+  }),
+);
 const prefSchema = z.object({
   reportMode: reportModeSchema.default("game"),
   matchId: matchIdSchema.optional(),
@@ -525,11 +548,7 @@ app.put(
 app.post(
   "/api/jobs",
   wrap(async (req, res) => {
-    if (
-      [...jobs.values()].some(
-        (j) => j.status === "preparing" || j.status === "rendering",
-      )
-    ) {
+    if ([...jobs.values()].some((j) => isActiveJob(j.status))) {
       res.status(409).json({ error: "已有视频正在生成，请等待它完成。" });
       return;
     }
@@ -569,6 +588,11 @@ app.post(
       return;
     }
     await resolveBgm(body.settings);
+    // Validation above can yield; recheck before reserving the single render slot.
+    if ([...jobs.values()].some((j) => isActiveJob(j.status))) {
+      res.status(409).json({ error: "已有任务，请先完成或停止当前任务。" });
+      return;
+    }
     const id =
       new Date().toISOString().replace(/[:.]/g, "-") +
       "-" +
@@ -586,11 +610,13 @@ app.post(
     const dir = path.join(root, "output", id);
     await mkdir(dir, { recursive: true });
     const update = jobWriter(dir, job);
+    const control = new RenderControl(job, update);
+    renderControls.set(id, control);
     await update();
     res.status(202).json(job);
     void (async () => {
       try {
-        const data =
+        const data = await control.run(async () =>
           body.source === "latest"
             ? await latestMatch(
                 body.leagueId || undefined,
@@ -598,14 +624,30 @@ app.post(
               )
             : body.reportMode !== "game"
               ? await loadLolSeries(body.matchId, body.gameIds, body.reportMode)
-              : await loadAnyMatch(body.matchId);
+              : await loadAnyMatch(body.matchId),
+        );
+        await control.checkpoint();
         // Auto mode always recomputes match-specific copy, so a previous match's text cannot leak into the new report.
         const settings =
           body.source === "latest"
             ? refreshSettings(data.match, body.settings)
             : body.settings;
-        await runRender(job, data.match, data.raw, settings, origin, update);
+        await runRender(
+          job,
+          data.match,
+          data.raw,
+          settings,
+          origin,
+          update,
+          control,
+        );
       } catch (e) {
+        if (e instanceof RenderCancelled) {
+          job.status = "cancelled";
+          job.message = e.message;
+          await update();
+          return;
+        }
         console.error(
           `[${new Date().toISOString()}] [job:${job.id}] 任务失败：`,
           e,
@@ -614,6 +656,8 @@ app.post(
         job.error = (e as Error).message;
         job.message = "数据暂不可用，未生成误导内容";
         await update();
+      } finally {
+        renderControls.delete(id);
       }
     })();
   }),

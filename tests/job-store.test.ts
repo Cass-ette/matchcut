@@ -35,6 +35,13 @@ test("restart persists interrupted jobs without losing settings, while completed
       files: { "matchcut.mp4": "/output/done/matchcut.mp4" },
     };
     await jobWriter(path.join(output, done.id), done)();
+    const cancelled: Job = {
+      ...job,
+      id: "cancelled",
+      status: "cancelled",
+      message: "任务已停止，设置已保留",
+    };
+    await jobWriter(path.join(output, cancelled.id), cancelled)();
     const jobs = await restoreJobs(output);
     assert.equal(jobs.get(job.id)?.status, "error");
     assert.match(jobs.get(job.id)!.error!, /生成已中断/);
@@ -46,6 +53,7 @@ test("restart persists interrupted jobs without losing settings, while completed
     assert.deepEqual(saved.props, job.props);
     assert.equal(saved.width, 3840);
     assert.deepEqual(jobs.get(done.id), done);
+    assert.deepEqual(jobs.get(cancelled.id), cancelled);
     const again = await restoreJobs(output);
     assert.deepEqual(again.get(job.id), saved);
   } finally {
