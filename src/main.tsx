@@ -747,7 +747,7 @@ function App() {
   const mvpGames = cs ? [] : (match.fullGames ?? (match.series ? [] : [match]));
   const sceneDescription = (slot: number) => {
     if (slot === 0)
-      return activeMatch.series ? "已收录局比分与逐局胜者" : "最终赛果与看点";
+      return activeMatch.series ? "系列赛赛果与逐局胜者" : "最终赛果与看点";
     if (slot === 1)
       return activeMatch.series
         ? "各局资源合计"
@@ -1161,7 +1161,6 @@ function App() {
                           ，未计入汇总。
                         </strong>
                       )}
-                      比分与统计只包含已收录局；未提供 BO 赛制，不推断最终胜者。
                     </p>
                   ) : (
                     <p>
@@ -1376,11 +1375,7 @@ function App() {
                 <Clock3 size={12} />
                 {matchDuration(match.duration)}
               </span>
-              <span>
-                {match.series
-                  ? "已收录 " + match.series.games.length + " 局比分"
-                  : winner + " 胜"}
-              </span>
+              <span>{match.winner ? winner + " 胜" : "双方战平"}</span>
             </div>
           </div>
           <div className="source-caption">

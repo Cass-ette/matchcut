@@ -49,7 +49,12 @@ try {
   );
   assert.doesNotMatch(
     await page.locator(".player-shell").innerText(),
-    /单局数据|DEFEAT|VICTORY/,
+    /单局数据/,
+  );
+  assert.match(await page.locator(".player-shell").innerText(), /VICTORY/);
+  assert.match(
+    await page.locator(".match-card-bottom").innerText(),
+    /Gen.G 胜/,
   );
   await page.getByRole("button", { name: "单局视频", exact: true }).click();
   await page.waitForFunction(() =>

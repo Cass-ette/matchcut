@@ -1118,11 +1118,7 @@ function Intro(props: Ctx) {
                       transform: "skewX(-8deg)",
                     }}
                   >
-                    {m.series
-                      ? `${m.series.wins[side]} WIN${m.series.wins[side] === 1 ? "" : "S"}`
-                      : winner
-                        ? "VICTORY"
-                        : "DEFEAT"}
+                    {!m.winner ? "DRAW" : winner ? "VICTORY" : "DEFEAT"}
                   </span>
                 </div>
               );
@@ -2641,7 +2637,12 @@ function Outro(props: Ctx) {
       : m.winner
         ? focus[m.winner === "radiant" ? 0 : 1]
         : f.top,
-    color = teamColor(winnerPlayer, s);
+    color = teamColor(winnerPlayer, s),
+    title = m.winner ? f.winner : m.radiant + " vs " + m.dire,
+    resultSides =
+      m.winner === "dire"
+        ? (["dire", "radiant"] as const)
+        : (["radiant", "dire"] as const);
   const frame = useCurrentFrame();
   return (
     <AbsoluteFill>
@@ -2657,7 +2658,7 @@ function Outro(props: Ctx) {
           letterSpacing: 0,
         }}
       >
-        {m.series ? "SERIES" : "VICTORY"}
+        {m.winner ? "VICTORY" : "DRAW"}
       </div>
       <HeroArt
         p={winnerPlayer}
@@ -2672,21 +2673,23 @@ function Outro(props: Ctx) {
         }}
       />
       <div style={{ position: "absolute", left: 85, top: 282, width: 1030 }}>
-        <Tag color={color}>{m.series ? "系列赛战报" : "WINNER / 获胜战队"}</Tag>
+        <Tag color={color}>
+          {!m.winner
+            ? "DRAW / 双方战平"
+            : m.series
+              ? "SERIES WINNER / 系列赛胜者"
+              : "WINNER / 获胜战队"}
+        </Tag>
         <div
           style={{
             fontFamily: display,
-            fontSize: fitDisplay(
-              m.series ? m.radiant + " vs " + m.dire : f.winner,
-              1000,
-              101,
-            ),
+            fontSize: fitDisplay(title, 1000, 101),
             fontWeight: 900,
             lineHeight: 1.16,
             marginTop: 21,
           }}
         >
-          {m.series ? m.radiant + " vs " + m.dire : f.winner}
+          {title}
         </div>
         <div
           style={{ width: 83, height: 5, background: color, margin: "34px 0" }}
@@ -2696,12 +2699,18 @@ function Outro(props: Ctx) {
             [
               m.series ? "系列赛比分" : "比赛用时",
               m.series
-                ? m.series.wins.radiant + " : " + m.series.wins.dire
+                ? resultSides.map((side) => m.series!.wins[side]).join(" : ")
                 : matchDuration(m.duration),
             ],
             [
               m.cs ? "回合比分" : m.series ? "总击杀" : "击杀",
-              m.radiantScore + " : " + m.direScore,
+              m.series
+                ? resultSides
+                    .map((side) =>
+                      side === "radiant" ? m.radiantScore : m.direScore,
+                    )
+                    .join(" : ")
+                : m.radiantScore + " : " + m.direScore,
             ],
             [
               m.cs ? "最多击杀" : "最高伤害",

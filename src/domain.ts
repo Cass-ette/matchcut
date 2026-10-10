@@ -331,7 +331,7 @@ export type SeriesDetails = {
   players: PlayerData[];
 };
 export type ReportData = Omit<MatchData, "winner"> & {
-  // For a series this is the leader among recorded games, never an inferred champion.
+  // Series winners are determined by game-win totals; equal totals are a draw.
   winner: MatchData["winner"] | null;
   series?: SeriesDetails;
   // Exact source snapshots for a continuous film; never substitute aggregate players.
@@ -764,7 +764,7 @@ export function defaultSettings(m: ReportData): Settings {
       secondary: "#c4d0e4",
       headline: score.length <= 44 ? score : "系列赛战报",
       scripts: [
-        `系列赛 · ${score}${missingGames.length ? ` · ${gameScope(m)}` : ""}`,
+        `${m.winner ? f.winner + " 赢得系列赛" : "系列赛战平"} · ${score}${missingGames.length ? ` · ${gameScope(m)}` : ""}`,
         "",
         "系列赛对位雷达",
         `伤害第一 · ${f.top.name} · ${num(f.top.damage)}`,

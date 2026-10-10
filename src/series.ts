@@ -17,7 +17,7 @@ export type LolSeries = {
 
 // OE has no universal series ID. Group adjacent numbered games for the same teams;
 // a reset/repeat of the game number or an eight-hour gap starts another meeting.
-// This describes available games only, never infers a BO format or series winner.
+// Series results are decided by the game-win totals when the games are aggregated.
 export function groupLolSeries(matches: LolSummary[]): LolSeries[] {
   const result: LolSeries[] = [],
     latest = new Map<string, LolSeries>();

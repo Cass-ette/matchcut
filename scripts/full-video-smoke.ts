@@ -77,6 +77,14 @@ try {
   await page.goto(base + "/?game=lol", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "完整视频", exact: true }).click();
   await page.locator(".chapter-strip").waitFor();
+  assert.doesNotMatch(
+    await page.locator(".series-scope").innerText(),
+    /不推断最终胜者/,
+  );
+  assert.match(
+    await page.locator(".match-card-bottom").innerText(),
+    new RegExp(match[match.winner!] + " 胜"),
+  );
   assert.equal(
     await page.locator(".chapter-strip button").count(),
     ids.length + 2,
@@ -91,6 +99,15 @@ try {
       await page.locator(".scene-strip button").nth(s).click();
       await page.waitForTimeout(180);
       const film = page.locator("[data-match-film]");
+      if (c === 0) {
+        assert.match(await film.innerText(), /VICTORY/);
+        assert.match(await film.innerText(), /DEFEAT/);
+      }
+      if (c === ids.length + 1 && s === count - 1) {
+        assert.match(await film.innerText(), /SERIES WINNER \/ 系列赛胜者/);
+        assert.ok((await film.innerText()).includes(match[match.winner!]));
+        await film.screenshot({ path: folder + "/series-winner.png" });
+      }
       assert.equal(
         await film.getAttribute("data-film-chapter"),
         c === 0 ? "opening" : c === ids.length + 1 ? "summary" : ids[c - 1],

@@ -124,7 +124,8 @@ test("real BO5 aggregates teams across side swaps, uses wins as series score and
     comparisonScript(report, { ...settings, radarPosition: "3" }),
     /中单.*对位/,
   );
-  assert.doesNotMatch(settings.scripts.join(""), /拿下胜利|本局胜者|冠军/);
+  assert.equal(report.winner, "radiant");
+  assert.match(settings.scripts[0], /Gen.G 赢得系列赛 · Gen.G 3 : 2 T1/);
   assert.ok(
     previewProps(report, settings).captions.some((c) =>
       c.text.includes("系列赛"),
@@ -138,6 +139,7 @@ test("partial series expose gaps and tied results; optional missing values never
   const report = summarizeLolSeries([games[0], games[2]]);
   assert.deepEqual(report.series!.missingGames, [2]);
   assert.equal(report.winner, null);
+  assert.match(defaultSettings(report).scripts[0], /^系列赛战平/);
   assert.deepEqual(report.series!.wins, { radiant: 1, dire: 1 });
   assert.equal(
     report.players.find((p) => p.name === "Kiin")!.vision,
