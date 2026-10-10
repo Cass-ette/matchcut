@@ -3,7 +3,7 @@
 English names, team names, headings and numbers use Orbitron 700 / 900 from
 the existing `@fontsource/orbitron` dependency (SIL Open Font License 1.1).
 
-Large Chinese headings use ZCOOL QingKe HuangYou (站酷庆科黄油体), Regular:
+Chinese video lettering uses ZCOOL QingKe HuangYou (站酷庆科黄油体), Regular:
 
 - Upstream: https://github.com/google/fonts/tree/main/ofl/zcoolqingkehuangyou
 - Original file: `ZCOOLQingKeHuangYou-Regular.ttf`
@@ -15,8 +15,10 @@ Large Chinese headings use ZCOOL QingKe HuangYou (站酷庆科黄油体), Regula
   character set is preserved. No external font requests are needed at runtime.
 
 Orbitron is used for titles, team/player identities and short English labels.
-Chinese display lettering is limited to large headings; small Chinese labels,
-subtitles and longer explanatory text retain a readable body font.
+Chinese headings, radar/table labels, subtitles and other video text all use the
+bundled Chinese face. It precedes system fonts in the body, display and monospace
+fallback stacks, so new components inherit the same typography. The editor's
+interface retains its own body font.
 
 The independent design study uses Barlow Condensed SemiBold for scores and
 numerical data. Player names retain Orbitron.

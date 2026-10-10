@@ -2,12 +2,44 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { normalizeLol } from "../src/lol";
-import { playerShares, playerStats } from "../src/player-stats";
+import {
+  comparisonStats,
+  playerShares,
+  playerStats,
+} from "../src/player-stats";
 import { summarizeLolSeries } from "../src/series";
 const read = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const catalog = read("data/fixtures/lol/champions.json");
 const rows = () => read("data/fixtures/lol/LOLTMNT02_76144.json").rows;
 const game = () => normalizeLol(rows(), catalog);
+
+test("comparison bars retain raw proportions, use a fixed percent scale, and omit missing/composite metrics", () => {
+  const m = game(),
+    a = m.players[0],
+    b = m.players[5];
+  a.damage = 1000.4;
+  b.damage = 2000.8;
+  a.teamTotals!.damage = 4001.6;
+  b.teamTotals!.damage = 4001.6;
+  a.vision = 0;
+  b.vision = 0;
+  a.damageTaken = undefined;
+  const stats = comparisonStats(m, [a, b]);
+  assert.deepEqual(stats.find((s) => s.label === "伤害")!.bars, {
+    a: 0.5,
+    b: 1,
+  });
+  assert.deepEqual(stats.find((s) => s.label === "伤害占比")!.bars, {
+    a: 0.25,
+    b: 0.5,
+  });
+  assert.deepEqual(stats.find((s) => s.label === "视野得分")!.bars, {
+    a: 0,
+    b: 0,
+  });
+  assert.equal(stats.find((s) => s.label === "承伤")!.bars, undefined);
+  assert.equal(stats.find((s) => s.label === "K / D / A")!.bars, undefined);
+});
 
 test("all positions expose the same full statistics; each team's shares sum to 100", () => {
   const m = game();

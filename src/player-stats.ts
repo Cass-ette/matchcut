@@ -25,8 +25,15 @@ export function playerShares(match: ReportData, player: PlayerData) {
   };
 }
 
+type PlayerStat = {
+  label: string;
+  value: string;
+  numeric?: number;
+  percent?: boolean;
+};
+
 // Every role sees the same metrics. Role-specific emphasis belongs to the radar.
-export function playerStats(match: ReportData, p: PlayerData) {
+export function playerStats(match: ReportData, p: PlayerData): PlayerStat[] {
   const minutes = (p.playedDuration ?? match.duration) / 60;
   const shares = playerShares(match, p);
   const rate = (value: number | undefined) =>
@@ -37,6 +44,7 @@ export function playerStats(match: ReportData, p: PlayerData) {
     decimal = false,
   ) => ({
     label,
+    numeric: value,
     value:
       value === undefined
         ? "—"
@@ -46,6 +54,8 @@ export function playerStats(match: ReportData, p: PlayerData) {
   });
   const percent = (label: string, value: number | undefined) => ({
     label,
+    numeric: value,
+    percent: true,
     value: value === undefined ? "—" : value.toFixed(1) + "%",
   });
   const common = [
@@ -97,4 +107,46 @@ export function playerStats(match: ReportData, p: PlayerData) {
     number("眩晕时长", p.stuns, true),
     number("英雄治疗", p.healing),
   ];
+}
+
+const chartedMetrics = new Set([
+  "伤害",
+  "承伤",
+  "总经济",
+  "分均经济",
+  "分均伤害",
+  "视野得分",
+  "分均经验",
+  "建筑伤害",
+  "ADR",
+  "首杀",
+]);
+export function comparisonStats(
+  match: ReportData,
+  pair: [PlayerData, PlayerData],
+) {
+  const right = playerStats(match, pair[1]);
+  return playerStats(match, pair[0]).map((a, i) => {
+    const b = right[i];
+    const comparable =
+      (a.percent || chartedMetrics.has(a.label)) &&
+      a.numeric !== undefined &&
+      b.numeric !== undefined &&
+      Number.isFinite(a.numeric) &&
+      Number.isFinite(b.numeric);
+    // Percentages use a fixed 0–100 scale. Absolute values share a scale within
+    // each row; missing data must not look like a legitimate zero-length bar.
+    const scale = a.percent ? 100 : Math.max(a.numeric ?? 0, b.numeric ?? 0);
+    return {
+      label: a.label,
+      a: a.value,
+      b: b.value,
+      bars: comparable
+        ? {
+            a: scale > 0 ? Math.max(0, Math.min(1, a.numeric! / scale)) : 0,
+            b: scale > 0 ? Math.max(0, Math.min(1, b.numeric! / scale)) : 0,
+          }
+        : undefined,
+    };
+  });
 }

@@ -14,7 +14,7 @@ import {
 } from "remotion";
 import "@fontsource/orbitron/latin-700.css";
 import "@fontsource/orbitron/latin-900.css";
-import { playerShares, playerStats } from "../player-stats";
+import { comparisonStats, playerShares, playerStats } from "../player-stats";
 import { teamInitials } from "../media";
 import { StatIcon, StatLabel } from "../StatIcon";
 import { PlayerPlaceholder } from "../PlayerPlaceholder";
@@ -46,11 +46,13 @@ import {
   bgmVolume,
 } from "../domain";
 
-const font = '"Arial", "PingFang SC", "Microsoft YaHei", sans-serif';
-const display = '"Orbitron", "Arial Black", "Arial", "PingFang SC", sans-serif';
-const heading =
+// Orbitron supplies Latin lettering; use the bundled Chinese face before any
+// system fallback in every video text style, including new tables and labels.
+const font = '"Arial", "ZCOOL QingKe HuangYou", "PingFang SC", sans-serif';
+const display =
   '"Orbitron", "ZCOOL QingKe HuangYou", "Arial Black", "PingFang SC", sans-serif';
-const mono = '"SF Mono", "Menlo", monospace';
+const heading = display;
+const mono = '"SF Mono", "Menlo", "ZCOOL QingKe HuangYou", monospace';
 export const palettes = {
   obsidian: {
     bg: "#080706",
@@ -125,10 +127,15 @@ function Inventory({
     ? inventory.layout === "list"
       ? 36
       : 32
-    : compact
-      ? 58
-      : 76;
-  const height = narrow ? 32 : compact ? 42 : 55;
+    : inventory.layout === "list"
+      ? compact
+        ? 42
+        : 54
+      : compact
+        ? 58
+        : 76;
+  const height =
+    inventory.layout === "list" ? width : narrow ? 32 : compact ? 42 : 55;
   const slot = (item: InventoryItem | null, key: string) => (
     <div
       key={key}
@@ -330,15 +337,18 @@ function FullStats({
             paddingTop: 3,
           }}
         >
-          <div style={{ fontSize: 13, lineHeight: "15px", color: palette.dim }}>
+          <div
+            data-stat-label
+            style={{ fontSize: 16, lineHeight: "17px", color: palette.dim }}
+          >
             {stat.label}
           </div>
           <div
             style={{
               fontFamily: display,
-              fontSize: 17,
+              fontSize: 19,
               fontWeight: 700,
-              lineHeight: "20px",
+              lineHeight: "22px",
               whiteSpace: "nowrap",
             }}
           >
@@ -415,6 +425,122 @@ function Portrait({
         objectPosition: photo ? "center 20%" : "center",
       }}
     />
+  );
+}
+function ComparisonPortrait({
+  player,
+  game,
+  color,
+}: {
+  player: PlayerData;
+  game: MatchData["game"];
+  color: string;
+}) {
+  const photo = useContext(PlayerVisualContext);
+  const hero = game !== "cs2" && !player.champions;
+  const heroIcon = (size: number) => (
+    <Img
+      data-comparison-hero
+      src={asset(player.image)}
+      alt={player.hero}
+      title={player.hero}
+      style={{
+        width: size,
+        height: size,
+        objectFit: "cover",
+        display: "block",
+      }}
+    />
+  );
+  return (
+    <div
+      data-comparison-portrait
+      style={{ position: "relative", width: 64, height: 64, flexShrink: 0 }}
+    >
+      {hero && !photo ? (
+        heroIcon(64)
+      ) : (
+        <Portrait p={player} width={64} height={64} />
+      )}
+      {hero && photo && (
+        <div
+          style={{
+            position: "absolute",
+            right: -5,
+            bottom: -4,
+            border: "2px solid " + color,
+            borderRadius: 4,
+            overflow: "hidden",
+          }}
+        >
+          {heroIcon(28)}
+        </div>
+      )}
+    </div>
+  );
+}
+function ComparisonValue({
+  value,
+  ratio,
+  color,
+  line,
+  right = false,
+}: {
+  value: string;
+  ratio?: number;
+  color: string;
+  line: string;
+  right?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        minWidth: 0,
+        height: 30,
+        textAlign: right ? "right" : "left",
+      }}
+    >
+      <span
+        style={{
+          fontFamily: display,
+          fontWeight: 700,
+          fontSize: 21,
+          lineHeight: "23px",
+          color,
+        }}
+      >
+        {value}
+      </span>
+      {ratio !== undefined && (
+        <div
+          data-comparison-track
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 6,
+            background: line + "80",
+            borderRadius: 2,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            data-comparison-bar
+            data-ratio={ratio}
+            style={{
+              position: "absolute",
+              height: "100%",
+              width: `${ratio * 100}%`,
+              ...(right ? { left: 0 } : { right: 0 }),
+              background: color + "b0",
+              borderRadius: 2,
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 function HeroArt({ p, style }: { p: PlayerData; style?: React.CSSProperties }) {
@@ -1475,9 +1601,10 @@ function RadarChart({
             <text
               x={x}
               y={y - 8}
+              data-stat-label
               fill={p.dim}
               fontFamily={font}
-              fontSize="21"
+              fontSize="24"
               fontWeight="700"
             >
               {label}
@@ -1941,7 +2068,7 @@ function RadarScene(props: Ctx) {
             data-player-stats
             style={{
               position: "absolute",
-              top: 634,
+              top: 622,
               left: 1105,
               right: 85,
               boxSizing: "border-box",
@@ -2011,7 +2138,7 @@ function RadarScene(props: Ctx) {
             </div>
           </div>
           <div
-            style={{ position: "absolute", top: 754, left: 1105, right: 85 }}
+            style={{ position: "absolute", top: 750, left: 1105, right: 85 }}
           >
             <FullStats match={m} player={player} palette={p} />
           </div>
@@ -2040,7 +2167,11 @@ function RadarScene(props: Ctx) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <Portrait p={pl} width={72} height={58} />
+                  <ComparisonPortrait
+                    player={pl}
+                    game={m.game}
+                    color={teamColor(pl, s)}
+                  />
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
@@ -2052,9 +2183,11 @@ function RadarScene(props: Ctx) {
                     >
                       {pl.name}
                     </div>
-                    <div style={{ fontSize: 14, color: p.dim, marginTop: 6 }}>
-                      {pl.hero}
-                    </div>
+                    {pl.champions && (
+                      <div style={{ fontSize: 16, color: p.dim, marginTop: 6 }}>
+                        {pl.hero}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {!m.series && m.game === "lol" && (
@@ -2079,44 +2212,37 @@ function RadarScene(props: Ctx) {
             data-full-comparison
             style={{ marginTop: 22, borderTop: "1px solid " + p.line }}
           >
-            {playerStats(m, focus[0]).map((stat, i) => (
+            {comparisonStats(m, focus).map((stat) => (
               <div
                 key={stat.label}
                 data-comparison-stats
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 150px 1fr",
+                  gridTemplateColumns: "minmax(0,1fr) 150px minmax(0,1fr)",
                   alignItems: "center",
-                  minHeight: 29,
+                  minHeight: 31,
                   borderBottom: "1px solid " + p.line + "70",
                 }}
               >
+                <ComparisonValue
+                  value={stat.a}
+                  ratio={stat.bars?.a}
+                  color={s.accent}
+                  line={p.line}
+                />
                 <span
-                  style={{
-                    fontFamily: display,
-                    fontWeight: 700,
-                    fontSize: 19,
-                    color: s.accent,
-                  }}
-                >
-                  {stat.value}
-                </span>
-                <span
-                  style={{ fontSize: 17, textAlign: "center", color: p.dim }}
+                  data-stat-label
+                  style={{ fontSize: 20, textAlign: "center", color: p.dim }}
                 >
                   {stat.label}
                 </span>
-                <span
-                  style={{
-                    fontFamily: display,
-                    fontWeight: 700,
-                    fontSize: 19,
-                    textAlign: "right",
-                    color: s.secondary,
-                  }}
-                >
-                  {playerStats(m, focus[1])[i].value}
-                </span>
+                <ComparisonValue
+                  value={stat.b}
+                  ratio={stat.bars?.b}
+                  color={s.secondary}
+                  line={p.line}
+                  right
+                />
               </div>
             ))}
           </div>

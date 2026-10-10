@@ -87,6 +87,39 @@ async function check(page: Page, expected: number, mode: number) {
     const film = document
       .querySelector("[data-match-film]")!
       .getBoundingClientRect();
+    if (
+      !document.fonts.check(
+        '400 24px "ZCOOL QingKe HuangYou"',
+        "伤害占比承伤经济正面对比",
+      )
+    )
+      failures.push("Chinese video font not loaded");
+    for (const label of document.querySelectorAll("[data-stat-label]")) {
+      if (!getComputedStyle(label).fontFamily.includes("ZCOOL QingKe HuangYou"))
+        failures.push("Chinese label fell back to system font");
+    }
+    for (const icon of document.querySelectorAll<HTMLImageElement>(
+      "[data-comparison-hero]",
+    )) {
+      if (!icon.complete || !icon.naturalWidth)
+        failures.push("Comparison hero icon failed");
+    }
+    for (const bar of document.querySelectorAll<HTMLElement>(
+      "[data-comparison-bar]",
+    )) {
+      const ratio = Number(bar.dataset.ratio);
+      const track = bar.parentElement!.getBoundingClientRect();
+      const bounds = bar.getBoundingClientRect();
+      if (
+        !Number.isFinite(ratio) ||
+        ratio < 0 ||
+        ratio > 1 ||
+        Math.abs(bounds.width / track.width - ratio) > 0.01
+      )
+        failures.push("Comparison bar scale mismatch");
+      if (bounds.left < track.left - 1 || bounds.right > track.right + 1)
+        failures.push("Comparison bar exceeds its cell");
+    }
     const caption = document
       .querySelector("[data-film-caption]")
       ?.getBoundingClientRect();
@@ -217,6 +250,35 @@ try {
                 ? 2
                 : 1;
           await check(page, expected, mode);
+          if (mode === 2) {
+            const icons = page.locator("[data-comparison-hero]");
+            assert.equal(
+              await icons.count(),
+              match.game === "cs2" || match.series ? 0 : 2,
+            );
+            if (match.game !== "cs2" && !match.series) {
+              const pair = groups[group].pair!;
+              for (const [i, person] of pair.entries()) {
+                assert.ok(
+                  (await icons.nth(i).getAttribute("src"))?.endsWith(
+                    person.image,
+                  ),
+                );
+                assert.equal(
+                  await icons.nth(i).getAttribute("alt"),
+                  person.hero,
+                );
+                assert.ok(
+                  !(
+                    await page
+                      .locator("[data-player-comparison]")
+                      .nth(i)
+                      .innerText()
+                  ).includes(person.hero),
+                );
+              }
+            }
+          }
           if (name === "lol" && process.argv.includes("--loadouts")) {
             assert.equal(
               await page.locator("[data-player-loadout]").count(),
