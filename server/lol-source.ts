@@ -197,7 +197,11 @@ export async function loadLolMatch(id: string) {
   return { match, raw, cached: true };
 }
 
-export async function loadLolSeries(id: string, gameIds?: string[]) {
+export async function loadLolSeries(
+  id: string,
+  gameIds?: string[],
+  mode: "series" | "full" = "series",
+) {
   matchIdSchema.parse(id);
   const group = groupLolSeries(await listLolMatches()).find((s) =>
     s.games.some((g) => g.id === id),
@@ -215,9 +219,12 @@ export async function loadLolSeries(id: string, gameIds?: string[]) {
   const data = [];
   for (const gameId of ids) data.push(await loadLolMatch(gameId));
   return {
-    match: summarizeLolSeries(data.map((d) => d.match)),
+    match: {
+      ...summarizeLolSeries(data.map((d) => d.match)),
+      ...(mode === "full" ? { fullGames: data.map((d) => d.match) } : {}),
+    },
     raw: {
-      mode: "series",
+      mode,
       games: data.map((d) => ({
         matchId: d.match.id,
         source: d.match.source,

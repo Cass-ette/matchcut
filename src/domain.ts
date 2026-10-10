@@ -19,6 +19,10 @@ export const DEFAULT_MATCH = "9035078952";
 export const DEFAULT_LOL_MATCH = "lol-LOLTMNT02_76144";
 export const DEFAULT_CS_MATCH = "cs2-monte-og-anubis";
 export type Game = "dota2" | "lol" | "cs2";
+export const reportModeSchema = z.enum(["game", "series", "full"]);
+export type ReportMode = z.infer<typeof reportModeSchema>;
+export const reportModeOf = (m: ReportData): ReportMode =>
+  m.fullGames ? "full" : m.series ? "series" : "game";
 export const csMapIcon = (map: string) =>
   [
     "ancient",
@@ -151,6 +155,9 @@ export const settingsSchema = z.object({
   pace: z.enum(["snappy", "standard", "relaxed"]).default("standard"),
   captions: z.boolean().default(true),
   scripts: z.array(z.string().trim().max(240)).length(5),
+  gameScripts: z
+    .record(matchIdSchema, z.array(z.string().trim().max(240)).length(5))
+    .optional(),
   resolution: z.enum(["1080", "720", "1440", "2160"]).default("1080"),
   radarMode: z.enum(["positions", "damage", "ranked"]).default("positions"),
   radarPosition: z.enum(["all", "1", "2", "3", "4", "5"]).default("all"),
@@ -291,8 +298,15 @@ export type ReportData = Omit<MatchData, "winner"> & {
   // For a series this is the leader among recorded games, never an inferred champion.
   winner: MatchData["winner"] | null;
   series?: SeriesDetails;
+  // Exact source snapshots for a continuous film; never substitute aggregate players.
+  fullGames?: MatchData[];
 };
-export type Segment = { text: string; frames: number };
+export type Segment = {
+  text: string;
+  frames: number;
+  chapterIndex?: number;
+  sceneIndex?: number;
+};
 export type Caption = { text: string; start: number; end: number };
 export type VideoProps = {
   match: ReportData;
@@ -300,6 +314,12 @@ export type VideoProps = {
   segments: Segment[];
   captions: Caption[];
   bgmTrack?: BgmTrack;
+  chapters?: VideoChapter[];
+};
+export type VideoChapter = Omit<VideoProps, "chapters" | "bgmTrack"> & {
+  key: string;
+  label: string;
+  slots: number[];
 };
 
 const finite = (value: unknown, field: string, nonnegative = true): number => {
@@ -570,6 +590,7 @@ export const participation = (
     : undefined;
 };
 export function comparisonScript(m: ReportData, s: Settings) {
+  if (m.fullGames?.length === 1) m = m.fullGames[0];
   if (s.radarMode === "damage") {
     const [a, b] = getFocus(m);
     return `双方伤害最高 · ${a.name} vs ${b.name}`;
@@ -601,6 +622,7 @@ export function refreshSettings(
     ...previous,
     playerVisual: m.game === "cs2" ? ("photo" as const) : previous.playerVisual,
     headline: defaults.headline,
+    gameScripts: keepOverrides ? previous.gameScripts : undefined,
     scripts: defaults.scripts.map((text, i) =>
       previous.scripts[i].trim() ? text : "",
     ),
@@ -644,6 +666,7 @@ export function facts(m: ReportData) {
   };
 }
 export function defaultSettings(m: ReportData): Settings {
+  if (m.fullGames?.length === 1) return defaultSettings(m.fullGames[0]);
   const f = facts(m);
   if (m.cs) {
     const headline = `${f.winner} ${Math.max(m.radiantScore, m.direScore)} : ${Math.min(m.radiantScore, m.direScore)} 拿下 ${m.cs.map}`;
@@ -887,6 +910,7 @@ export function previewProps(
   settings: Settings,
   bgmTrack?: BgmTrack,
 ): VideoProps {
+  if (match.fullGames) return fullVideoProps(match, settings, bgmTrack);
   const groups = comparisons(match, settings);
   const base = [7, 10, groups.length > 1 ? groups.length * 18 : 24, 10, 7];
   const speed = { snappy: 0.82, standard: 1, relaxed: 1.2 }[settings.pace];
@@ -925,6 +949,110 @@ export function previewProps(
     captions: makeCaptions(captionSegments),
     ...(bgmTrack && settings.bgm?.trackId === bgmTrack.id ? { bgmTrack } : {}),
   };
+}
+
+function fullVideoProps(
+  match: ReportData,
+  settings: Settings,
+  bgmTrack?: BgmTrack,
+): VideoProps {
+  const { fullGames, ...summary } = match;
+  if (
+    !summary.series ||
+    !fullGames?.length ||
+    fullGames.length !== summary.series.games.length ||
+    new Set(fullGames.map((g) => g.id)).size !== fullGames.length
+  )
+    throw new Error("完整视频缺少逐局数据，请重新载入系列赛。");
+  const games = summary.series.games.map((g) => {
+    const source = fullGames.find((item) => item.id === g.id);
+    if (!source) throw new Error("完整视频的逐局数据与汇总不一致。");
+    return source;
+  });
+  const chapters: VideoChapter[] = [];
+  const add = (
+    key: string,
+    label: string,
+    data: ReportData,
+    s: Settings,
+    slots: number[],
+  ) => {
+    const { bgmTrack: _music, ...props } = previewProps(data, s);
+    chapters.push({ ...props, key, label, slots });
+  };
+  if (games.length === 1) {
+    // The aggregate of one game would repeat the same statistics.
+    add(games[0].id, gameScope(games[0]), games[0], settings, [0, 1, 2, 3, 4]);
+  } else {
+    add("opening", "开场", summary, settings, [0]);
+    for (const game of games) {
+      const local = refreshSettings(game, settings);
+      local.scripts = settings.gameScripts?.[game.id] ?? local.scripts;
+      // Retain actual blue/red sides and pin each team's color across side swaps.
+      if (game.radiant !== summary.radiant) {
+        local.accent = settings.secondary;
+        local.secondary = settings.accent;
+      }
+      add(game.id, gameScope(game), game, local, [1, 2, 3]);
+    }
+    add("summary", "系列赛汇总", summary, settings, [1, 2, 3, 4]);
+  }
+  const segments: Segment[] = [];
+  const captions: Caption[] = [];
+  let offset = 0;
+  chapters.forEach((chapter, chapterIndex) => {
+    chapter.slots.forEach((sceneIndex) => {
+      const segment = chapter.segments[sceneIndex];
+      const localStart = totalFrames(chapter.segments.slice(0, sceneIndex));
+      for (const caption of chapter.captions) {
+        if (
+          caption.start >= localStart &&
+          caption.end <= localStart + segment.frames
+        )
+          captions.push({
+            ...caption,
+            start: caption.start - localStart + offset,
+            end: caption.end - localStart + offset,
+          });
+      }
+      segments.push({ ...segment, chapterIndex, sceneIndex });
+      offset += segment.frames;
+    });
+  });
+  return {
+    match,
+    settings,
+    chapters,
+    segments,
+    captions,
+    ...(bgmTrack && settings.bgm?.trackId === bgmTrack.id ? { bgmTrack } : {}),
+  };
+}
+
+// Used by preview navigation and export metadata; legacy five-slot projects stay valid.
+export function videoScenes(props: VideoProps) {
+  let start = 0;
+  return props.segments.flatMap((segment, index) => {
+    const from = start;
+    start += segment.frames;
+    if (!segment.frames) return [];
+    const chapter = props.chapters?.[segment.chapterIndex ?? 0];
+    const local = chapter ?? props;
+    const slot = segment.sceneIndex ?? index;
+    return [
+      {
+        index,
+        slot,
+        from,
+        frames: segment.frames,
+        chapterIndex: segment.chapterIndex,
+        chapter,
+        match: local.match,
+        settings: local.settings,
+        name: sceneNames(local.match)[sceneSlots(local.match).indexOf(slot)],
+      },
+    ];
+  });
 }
 export function bgmVolume(
   frame: number,

@@ -42,8 +42,10 @@ import {
   VIDEO_HEIGHT,
   exportResolutions,
   ReportData,
-  sceneNames,
-  sceneSlots,
+  ReportMode,
+  reportModeOf,
+  reportModeSchema,
+  videoScenes,
   csMapIcon,
   positionNames,
   sideName,
@@ -167,10 +169,10 @@ function App() {
     appliedJob = useRef("");
   const singleGameId = useRef(DEFAULT_LOL_MATCH);
   const drafts = useRef(new Map<string, Settings>());
-  const reportMode = match?.series ? "series" : "game";
+  const reportMode = match ? reportModeOf(match) : "game";
   const draftKey = (m: ReportData) =>
     m.series
-      ? "series:" + m.series.games.map((g) => g.id).join(",")
+      ? reportModeOf(m) + ":" + m.series.games.map((g) => g.id).join(",")
       : "game:" + m.id;
   const busy = Boolean(job && !["done", "error"].includes(job.status));
   useEffect(() => {
@@ -187,11 +189,14 @@ function App() {
         const prefs = data.preferences;
         setSettings(
           prefs?.settings
-            ? refreshSettings(
-                data.match,
-                settingsSchema.parse(prefs.settings),
-                true,
-              )
+            ? prefs.matchId === data.match.id &&
+              (prefs.reportMode ?? "game") === reportModeOf(data.match)
+              ? settingsSchema.parse(prefs.settings)
+              : refreshSettings(
+                  data.match,
+                  settingsSchema.parse(prefs.settings),
+                  true,
+                )
             : data.settings,
         );
         setSource(
@@ -240,11 +245,21 @@ function App() {
           teamId,
           reportMode,
           matchId: match?.id,
+          gameIds: match?.series?.games.map((g) => g.id),
         }),
       }).catch((e) => setError("偏好未保存：" + e.message));
     }, 700);
     return () => clearTimeout(id);
-  }, [settings, source, leagueId, teamId, match?.game, match?.id, reportMode]);
+  }, [
+    settings,
+    source,
+    leagueId,
+    teamId,
+    match?.game,
+    match?.id,
+    match?.series,
+    reportMode,
+  ]);
   useEffect(() => {
     if (!busy || !job) return;
     let stopped = false;
@@ -331,16 +346,16 @@ function App() {
   function patch<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((s) => (s ? { ...s, [key]: value } : s));
   }
-  async function load(id: string, mode: "game" | "series" = "game") {
+  async function load(id: string, mode: ReportMode = "game") {
     setLoading(true);
     setError("");
     try {
       const data = await api(
-        (mode === "series" ? "/api/lol/series/" : "/api/matches/") +
+        (mode === "game" ? "/api/matches/" : `/api/lol/${mode}/`) +
           encodeURIComponent(id.trim()),
       );
       if (match && settings) drafts.current.set(draftKey(match), settings);
-      singleGameId.current = id;
+      if (mode === "game") singleGameId.current = id;
       setMatch(data.match);
       setMatchId(data.match.id);
       setSettings(
@@ -354,11 +369,13 @@ function App() {
       setScene(0);
       player.current?.seekTo(60);
       setToast(
-        mode === "series"
-          ? "已载入系列赛累计数据"
-          : data.cached
-            ? "已载入本地保存的比赛"
-            : "比赛数据已载入并保存",
+        mode === "full"
+          ? "已编排逐局分析与系列赛汇总"
+          : mode === "series"
+            ? "已载入系列赛累计数据"
+            : data.cached
+              ? "已载入本地保存的比赛"
+              : "比赛数据已载入并保存",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -418,6 +435,7 @@ function App() {
           teamId,
           reportMode,
           matchId: match?.id,
+          gameIds: match?.series?.games.map((g) => g.id),
         }),
       });
       location.href = "?game=" + game;
@@ -551,6 +569,16 @@ function App() {
       const next = { ...current, ...changes, scripts: [...current.scripts] };
       if (current.scripts[2].trim())
         next.scripts[2] = comparisonScript(match, next);
+      if (current.gameScripts && match.fullGames) {
+        next.gameScripts = { ...current.gameScripts };
+        for (const game of match.fullGames) {
+          const scripts = next.gameScripts[game.id];
+          if (scripts?.[2].trim())
+            next.gameScripts[game.id] = scripts.map((text, i) =>
+              i === 2 ? comparisonScript(game, next) : text,
+            );
+        }
+      }
       return next;
     });
     player.current?.pause();
@@ -579,7 +607,7 @@ function App() {
       [
         JSON.stringify(
           {
-            schemaVersion: 6,
+            schemaVersion: 7,
             game: match.game || "dota2",
             aspectRatio: "16:9",
             matchId: match.id,
@@ -617,7 +645,9 @@ function App() {
       });
       if (!matchIdSchema.safeParse(json.matchId).success)
         throw new Error("项目里没有有效的比赛编号。");
-      const mode = json.reportMode === "series" ? "series" : "game";
+      const mode = reportModeSchema.parse(json.reportMode ?? "game");
+      if (mode === "full" && !json.gameIds)
+        throw new Error("完整视频项目缺少局数清单。");
       const gameIds = json.gameIds === undefined ? undefined : json.gameIds;
       if (
         gameIds !== undefined &&
@@ -628,9 +658,9 @@ function App() {
       )
         throw new Error("项目的系列赛局数无效。");
       const data = await api(
-        (mode === "series" ? "/api/lol/series/" : "/api/matches/") +
+        (mode === "game" ? "/api/matches/" : `/api/lol/${mode}/`) +
           json.matchId +
-          (mode === "series" && gameIds
+          (mode !== "game" && gameIds
             ? "?games=" + encodeURIComponent(gameIds.join(","))
             : ""),
       );
@@ -638,6 +668,7 @@ function App() {
       setMatch(data.match);
       setMatchId(data.match.id);
       setSettings(next);
+      setScene(0);
       setSource("current");
       setResult(null);
       setToast("已恢复比赛、模板与文案");
@@ -667,14 +698,35 @@ function App() {
   const winner = match.winner ? match[match.winner] : "双方";
   const lol = match.game === "lol",
     cs = match.game === "cs2";
-  const scenes = sceneSlots(match).map((index, order) => ({
-    index,
-    name: sceneNames(match)[order],
-  }));
-  const positions = positionNames(match);
-  const matchups = comparisons(match, settings);
+  const timeline = videoScenes(props);
+  const activeScene = timeline.find((s) => s.index === scene) ?? timeline[0];
+  const scenes = timeline.filter(
+    (s) => s.chapterIndex === activeScene.chapterIndex,
+  );
+  const activeMatch = activeScene.match;
+  const positions = positionNames(activeMatch);
+  const matchups = comparisons(activeMatch, activeScene.settings);
   const assigned = assignedPositions(match, settings);
-  const incomplete = matchups.some((c) => !c.pair);
+  const radarScene = scenes.find((s) => s.slot === 2);
+  const incomplete = (props.chapters ?? [props]).some((chapter) =>
+    comparisons(chapter.match, chapter.settings).some((c) => !c.pair),
+  );
+  const chapterControls = props.chapters && (
+    <div className="chapter-strip" aria-label="完整视频章节">
+      {props.chapters.map((chapter, index) => (
+        <button
+          key={chapter.key}
+          className={activeScene.chapterIndex === index ? "active" : ""}
+          aria-pressed={activeScene.chapterIndex === index}
+          onClick={() =>
+            seek(timeline.find((s) => s.chapterIndex === index)!.index)
+          }
+        >
+          {chapter.label}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <div className="app">
       <header className="topbar">
@@ -936,7 +988,22 @@ function App() {
                     >
                       系列赛汇总
                     </button>
+                    <button
+                      disabled={loading || busy}
+                      className={reportMode === "full" ? "selected" : ""}
+                      aria-pressed={reportMode === "full"}
+                      onClick={() => void load(match.id, "full")}
+                    >
+                      完整视频
+                    </button>
                   </div>
+                  {reportMode === "full" && (
+                    <p className="full-scope">
+                      {match.fullGames?.length === 1
+                        ? "当前仅收录一局，自动省略重复汇总。"
+                        : "一次开场 → 逐局分析 → 系列赛汇总与片尾。装备与符文按局展示。"}
+                    </p>
+                  )}
                   <label className="field-label">
                     选择局数{" "}
                     <span>
@@ -1259,25 +1326,27 @@ function App() {
           <div className="section-divider" />
           <div className="subheading">
             <span>节目编排</span>
-            <span>{scenes.length} 幕</span>
+            <span>{timeline.length} 幕</span>
           </div>
           <div className="story-list">
-            {scenes.map(({ name, index: i }, order) => (
+            {scenes.map(({ name, index: i, slot }, order) => (
               <button
                 key={name}
                 onClick={() => seek(i)}
                 className={scene === i ? "current" : ""}
               >
-                <span className="scene-num">0{order + 1}</span>
+                <span className="scene-num">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
                 <div>
                   <b>{name}</b>
                   <small>
                     {
                       [
-                        match.series
+                        activeMatch.series
                           ? "已收录局比分与逐局胜者"
                           : "最终赛果与看点",
-                        match.series
+                        activeMatch.series
                           ? "各局资源合计"
                           : lol
                             ? "终局经济与地图资源"
@@ -1298,11 +1367,11 @@ function App() {
                               ],
                         cs
                           ? "击杀多、死亡少、助攻多"
-                          : match.series
+                          : activeMatch.series
                             ? "选手累计输出前五"
                             : "全场输出前五",
                         "比分与赛果回顾",
-                      ][i]
+                      ][slot]
                     }
                   </small>
                 </div>
@@ -1344,8 +1413,9 @@ function App() {
           </div>
           <div className="preview-stage">
             <div className="stage-badge">
-              <span /> {sceneNames(match)[sceneSlots(match).indexOf(scene)]}{" "}
-              <span className="preview-indicator">预览</span>
+              <span />{" "}
+              {activeScene.chapter ? activeScene.chapter.label + " · " : ""}
+              {activeScene.name} <span className="preview-indicator">预览</span>
             </div>
             <div className="player-shell">
               <Player
@@ -1377,6 +1447,7 @@ function App() {
               </span>
             </div>
           </div>
+          {chapterControls}
           <div className="scene-strip">
             {scenes.map(({ name, index: i }, order) => (
               <button
@@ -1384,12 +1455,12 @@ function App() {
                 onClick={() => seek(i)}
                 className={scene === i ? "active" : ""}
               >
-                <span>0{order + 1}</span>
+                <span>{String(i + 1).padStart(2, "0")}</span>
                 {name}
               </button>
             ))}
           </div>
-          <section className="matchups-panel">
+          <section className="matchups-panel" hidden={!radarScene}>
             <div className="subheading">
               <span>雷达对比</span>
               <span>
@@ -1453,14 +1524,12 @@ function App() {
                 <button
                   key={c.key}
                   onClick={() => {
-                    setScene(2);
+                    if (!radarScene) return;
+                    setScene(radarScene.index);
                     player.current?.pause();
                     player.current?.seekTo(
-                      props.segments[0].frames +
-                        props.segments[1].frames +
-                        Math.floor(
-                          (props.segments[2].frames * i) / matchups.length,
-                        ) +
+                      radarScene.from +
+                        Math.floor((radarScene.frames * i) / matchups.length) +
                         65,
                     );
                   }}
@@ -1954,7 +2023,9 @@ function App() {
               <div className="small-notice">
                 {source === "latest"
                   ? "自动最新模式会重写标题和五段文案。要使用这里的编辑，切换到「指定比赛」。"
-                  : "这些文案由当前比赛数据生成。可以编辑，再一键重做。"}
+                  : match.fullGames
+                    ? "按预览中的章节编辑文案，各局分别保存。外观与对比模式应用于整条视频。"
+                    : "这些文案由当前比赛数据生成。可以编辑，再一键重做。"}
               </div>
               <label className="field-label">
                 开场标题 <span>{settings.headline.length}/44</span>
@@ -1966,24 +2037,38 @@ function App() {
                 value={settings.headline}
                 onChange={(e) => patch("headline", e.target.value)}
               />
-              {scenes.map(({ name, index: i }, order) => (
+              {scenes.map(({ name, index: i, slot, chapter }, order) => (
                 <div className="script-block" key={name}>
                   <label className="field-label">
-                    0{order + 1} · {name}
+                    {chapter ? chapter.label + " · " : ""}
+                    {name}
                   </label>
                   <textarea
                     rows={4}
                     aria-label={name + "文案"}
-                    value={settings.scripts[i]}
+                    value={props.segments[i].text}
                     maxLength={240}
-                    onChange={(e) =>
-                      patch(
-                        "scripts",
-                        settings.scripts.map((text, j) =>
-                          j === i ? e.target.value : text,
-                        ),
-                      )
-                    }
+                    onChange={(e) => {
+                      if (
+                        chapter &&
+                        !chapter.match.series &&
+                        props.chapters!.length > 1
+                      ) {
+                        patch("gameScripts", {
+                          ...settings.gameScripts,
+                          [chapter.key]: chapter.settings.scripts.map(
+                            (text, j) => (j === slot ? e.target.value : text),
+                          ),
+                        });
+                      } else {
+                        patch(
+                          "scripts",
+                          settings.scripts.map((text, j) =>
+                            j === slot ? e.target.value : text,
+                          ),
+                        );
+                      }
+                    }}
                   />
                 </div>
               ))}
@@ -1999,8 +2084,7 @@ function App() {
                 className="text-button"
                 onClick={() => {
                   const d = refreshSettings(match, settings, true);
-                  patch("scripts", d.scripts);
-                  patch("headline", d.headline);
+                  setSettings({ ...d, gameScripts: undefined });
                   setToast("已恢复这场比赛的默认文案");
                 }}
               >

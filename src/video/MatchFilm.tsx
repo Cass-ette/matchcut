@@ -2556,9 +2556,8 @@ export function MatchFilm(props: VideoProps) {
       .catch(cancelRender);
   }, [fontHandle]);
   const frame = useCurrentFrame();
-  const { match: m, settings: s, segments } = props;
-  const p = palettes[s.theme],
-    total = totalFrames(segments);
+  const { segments } = props;
+  const total = totalFrames(segments);
   let offset = 0;
   const starts = segments.map((segment) => {
     const start = offset;
@@ -2569,6 +2568,23 @@ export function MatchFilm(props: VideoProps) {
     0,
     starts.findLastIndex((start) => frame >= start),
   );
+  const segment = segments[index];
+  const chapter = props.chapters?.[segment.chapterIndex ?? 0];
+  const local = chapter ?? props;
+  const { match: m, settings: s } = local;
+  const p = palettes[s.theme];
+  const sceneIndex = segment.sceneIndex ?? index;
+  const slots = chapter?.slots ?? sceneSlots(m);
+  const scope =
+    chapter?.key === "opening"
+      ? "完整战报"
+      : m.series
+        ? "系列赛累计"
+        : gameScope(m);
+  const gameResult =
+    chapter && !m.series && m.winner
+      ? ` · ${m[m.winner]} 胜 · ${m.winner === "radiant" ? m.radiantScore : m.direScore} : ${m.winner === "radiant" ? m.direScore : m.radiantScore} · ${matchDuration(m.duration)}`
+      : "";
   const caption = props.captions.find((c) => frame >= c.start && frame < c.end);
   return (
     <PlayerVisualContext.Provider
@@ -2576,6 +2592,9 @@ export function MatchFilm(props: VideoProps) {
     >
       <AbsoluteFill
         data-match-film
+        data-film-chapter={chapter?.key}
+        data-film-match={m.id}
+        data-film-scene={sceneIndex}
         style={{ fontFamily: font, color: p.ink, overflow: "hidden" }}
       >
         <style>{`
@@ -2587,7 +2606,7 @@ export function MatchFilm(props: VideoProps) {
             font-display: block;
           }
         `}</style>
-        <Background {...props} />
+        <Background {...local} />
         {props.bgmTrack && s.bgm && (
           <Audio
             src={asset(props.bgmTrack.src)}
@@ -2602,7 +2621,10 @@ export function MatchFilm(props: VideoProps) {
           (seg, i) =>
             seg.frames > 0 && (
               <Sequence key={i} from={starts[i]} durationInFrames={seg.frames}>
-                <FilmScene {...props} index={i} />
+                <FilmScene
+                  {...(props.chapters?.[seg.chapterIndex ?? 0] ?? props)}
+                  index={seg.sceneIndex ?? i}
+                />
               </Sequence>
             ),
         )}
@@ -2650,10 +2672,17 @@ export function MatchFilm(props: VideoProps) {
               {gameTitle(m)}
             </span>
           </div>
-          <span style={{ fontSize: fit(m.league, 640, 20), color: p.dim }}>
+          <span
+            data-film-scope
+            style={{
+              fontSize: fit(m.league + scope + gameResult, 820, 20),
+              color: p.dim,
+            }}
+          >
             {m.league}
             <span style={{ marginLeft: 26, color: s.accent }}>
-              {m.series ? "系列赛" : gameScope(m)}
+              {scope}
+              {gameResult}
             </span>
           </span>
         </div>
@@ -2701,24 +2730,24 @@ export function MatchFilm(props: VideoProps) {
             {m.date ? " · " + m.date.slice(0, 10) : ""}
           </span>
           <div style={{ display: "flex", gap: 25 }}>
-            {sceneNames(m).map((scene, i) => (
+            {slots.map((slot, i) => (
               <span
-                key={scene}
+                key={slot}
                 style={{
-                  color: sceneSlots(m)[i] === index ? p.ink : p.dim,
-                  opacity: sceneSlots(m)[i] === index ? 1 : 0.55,
+                  color: slot === sceneIndex ? p.ink : p.dim,
+                  opacity: slot === sceneIndex ? 1 : 0.55,
                 }}
               >
                 <span
                   style={{
-                    color: sceneSlots(m)[i] === index ? s.accent : undefined,
+                    color: slot === sceneIndex ? s.accent : undefined,
                     fontFamily: mono,
                     marginRight: 8,
                   }}
                 >
                   0{i + 1}
                 </span>
-                {scene}
+                {sceneNames(m)[sceneSlots(m).indexOf(slot)]}
               </span>
             ))}
           </div>

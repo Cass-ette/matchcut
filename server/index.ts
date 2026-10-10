@@ -19,6 +19,7 @@ import {
   defaultSettings,
   refreshSettings,
   settingsSchema,
+  reportModeSchema,
 } from "../src/domain";
 import {
   initializeData,
@@ -333,8 +334,8 @@ app.get(
           : lol
             ? DEFAULT_LOL_MATCH
             : DEFAULT_MATCH;
-    const data = await (lol && saved?.reportMode === "series"
-      ? loadLolSeries(selected)
+    const data = await (lol && ["series", "full"].includes(saved?.reportMode)
+      ? loadLolSeries(selected, saved.gameIds, saved.reportMode)
       : loadAnyMatch(selected));
     res.json({
       match: data.match,
@@ -427,7 +428,7 @@ app.put(
   }),
 );
 app.get(
-  "/api/lol/series/:id",
+  ["/api/lol/series/:id", "/api/lol/full/:id"],
   wrap(async (req, res) => {
     const gameIds = req.query.games
       ? z
@@ -436,7 +437,11 @@ app.get(
           .max(15)
           .parse(String(req.query.games).split(","))
       : undefined;
-    const data = await loadLolSeries(String(req.params.id), gameIds);
+    const data = await loadLolSeries(
+      String(req.params.id),
+      gameIds,
+      req.path.includes("/full/") ? "full" : "series",
+    );
     res.json({
       match: data.match,
       settings: defaultSettings(data.match),
@@ -501,8 +506,9 @@ app.get("/api/jobs/:id", (req, res) => {
   res.json(job);
 });
 const prefSchema = z.object({
-  reportMode: z.enum(["game", "series"]).default("game"),
+  reportMode: reportModeSchema.default("game"),
   matchId: matchIdSchema.optional(),
+  gameIds: z.array(matchIdSchema).min(1).max(15).optional(),
   settings: settingsSchema,
   source: z.enum(["current", "latest"]),
   leagueId: z
@@ -542,7 +548,7 @@ app.post(
     const body = z
       .object({
         matchId: matchIdSchema,
-        reportMode: z.enum(["game", "series"]).default("game"),
+        reportMode: reportModeSchema.default("game"),
         gameIds: z.array(matchIdSchema).min(1).max(15).optional(),
         settings: settingsSchema,
         source: z.enum(["current", "latest"]).default("current"),
@@ -557,13 +563,14 @@ app.post(
       })
       .parse(req.body);
     if (
-      body.reportMode === "series" &&
+      body.reportMode !== "game" &&
       (!body.matchId.startsWith("lol-") ||
         body.source !== "current" ||
         !body.gameIds)
     ) {
       res.status(400).json({
-        error: "系列赛请使用已导入的英雄联盟比赛，并指定已预览的局数。",
+        error:
+          "系列赛和完整视频请使用已导入的英雄联盟比赛，并指定已预览的局数。",
       });
       return;
     }
@@ -610,8 +617,8 @@ app.post(
                 body.leagueId || undefined,
                 body.teamId || undefined,
               )
-            : body.reportMode === "series"
-              ? await loadLolSeries(body.matchId, body.gameIds)
+            : body.reportMode !== "game"
+              ? await loadLolSeries(body.matchId, body.gameIds, body.reportMode)
               : await loadAnyMatch(body.matchId);
         // Auto mode always recomputes match-specific copy, so a previous match's text cannot leak into the new report.
         const settings =

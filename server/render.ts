@@ -21,6 +21,8 @@ import {
   srt,
   totalFrames,
   providerName,
+  reportModeOf,
+  videoScenes,
 } from "../src/domain";
 
 const root = process.cwd();
@@ -98,7 +100,8 @@ export async function runRender(
     const props = previewProps(match, settings, bgmTrack);
     const { segments, captions } = props;
     job.props = props;
-    assertComparisons(match, settings);
+    for (const chapter of props.chapters ?? [props])
+      assertComparisons(chapter.match, chapter.settings);
     const output = exportResolutions[settings.resolution];
     job.width = output.width;
     job.height = output.height;
@@ -160,17 +163,30 @@ export async function runRender(
       path.join(folder, "project.json"),
       JSON.stringify(
         {
-          schemaVersion: 6,
+          schemaVersion: 7,
           game: match.game || "dota2",
           aspectRatio: "16:9",
           width: job.width,
           height: job.height,
           matchId: match.id,
-          reportMode: match.series ? "series" : "game",
+          reportMode: reportModeOf(match),
           gameIds: match.series?.games.map((g) => g.id),
           series: match.series,
           settings,
           backgroundMusic: bgmTrack || null,
+          chapters: props.chapters?.map((c) => ({
+            key: c.key,
+            label: c.label,
+            matchId: c.match.id,
+            slots: c.slots,
+          })),
+          timeline: videoScenes(props).map((s) => ({
+            from: s.from,
+            frames: s.frames,
+            scene: s.name,
+            chapter: s.chapter?.label,
+            matchId: s.match.id,
+          })),
           segments,
           frames: totalFrames(segments),
           fps: FPS,
@@ -196,7 +212,7 @@ export async function runRender(
       JSON.stringify(
         {
           provider: providerName(match),
-          reportMode: match.series ? "series" : "game",
+          reportMode: reportModeOf(match),
           games: match.series?.games,
           url: match.source,
           fetchedAt: match.fetchedAt,

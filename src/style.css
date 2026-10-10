@@ -1610,6 +1610,29 @@ select {
 }
 .series-games .source-switch {
   margin: 14px 0;
+  flex-wrap: wrap;
+}
+.series-games .source-switch button {
+  padding-inline: 6px;
+  white-space: nowrap;
+}
+.chapter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+.chapter-strip button {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chapter-strip button.active {
+  color: #f6c453;
+  border-color: #b39957;
+  background: #282317;
 }
 .series-scope strong {
   display: block;
