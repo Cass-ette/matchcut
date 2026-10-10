@@ -17,6 +17,7 @@ import "@fontsource/orbitron/latin-900.css";
 import { teamInitials } from "../media";
 import { StatIcon, StatLabel } from "../StatIcon";
 import { PlayerPlaceholder } from "../PlayerPlaceholder";
+import { type InventoryItem, type PlayerInventory } from "../items";
 import {
   MatchData,
   PlayerData,
@@ -108,6 +109,113 @@ const asset = (path: string) => staticFile(path.replace(/^\//, ""));
 const PlayerVisualContext = createContext(false);
 const teamColor = (p: PlayerData, s: VideoProps["settings"]) =>
   p.side === "radiant" ? s.accent : s.secondary;
+function Inventory({
+  inventory,
+  palette,
+  compact = false,
+}: {
+  inventory: PlayerInventory;
+  palette: typeof palettes.ember;
+  compact?: boolean;
+}) {
+  const width = compact ? 58 : 76;
+  const height = compact ? 42 : 55;
+  const slot = (item: InventoryItem | null, key: string) => (
+    <div
+      key={key}
+      data-item-slot
+      data-item-id={item?.id}
+      title={item?.name || "空装备栏"}
+      style={{
+        width,
+        height,
+        boxSizing: "border-box",
+        border: "1px solid " + palette.line,
+        background: palette.bg,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      {item?.image ? (
+        <Img
+          src={asset(item.image)}
+          alt={item.name}
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+        />
+      ) : item ? (
+        <span
+          style={{
+            fontFamily: mono,
+            fontSize: compact ? 12 : 15,
+            color: palette.dim,
+          }}
+        >
+          #{item.id}
+        </span>
+      ) : null}
+      {item?.count && item.count > 1 && (
+        <span
+          style={{
+            position: "absolute",
+            right: 0,
+            bottom: 0,
+            padding: "1px 4px",
+            background: "#080a10e6",
+            fontSize: compact ? 12 : 15,
+            color: "white",
+            lineHeight: 1.1,
+          }}
+        >
+          ×{item.count}
+        </span>
+      )}
+    </div>
+  );
+  const group = (
+    label: string,
+    items: (InventoryItem | null)[],
+    key: string,
+  ) => (
+    <div key={key} data-inventory-group={key} style={{ flexShrink: 0 }}>
+      <div
+        style={{
+          fontSize: compact ? 15 : 18,
+          color: palette.dim,
+          lineHeight: 1,
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ display: "flex", gap: compact ? 5 : 8 }}>
+        {items.map((item, n) => slot(item, `${key}-${n}`))}
+      </div>
+    </div>
+  );
+  return (
+    <div
+      data-player-inventory
+      data-inventory-layout={inventory.layout || "slots"}
+      style={{
+        display: "flex",
+        gap: compact ? 18 : 24,
+        alignItems: "flex-start",
+      }}
+    >
+      {group(
+        inventory.layout === "list" ? "赛末装备记录" : "最终装备",
+        inventory.main,
+        "main",
+      )}
+      {inventory.neutral && group("中立", [inventory.neutral], "neutral")}
+      {inventory.enhancement &&
+        group("附魔", [inventory.enhancement], "enhancement")}
+    </div>
+  );
+}
 function Portrait({
   p,
   width = 96,
@@ -185,6 +293,7 @@ function HeroArt({ p, style }: { p: PlayerData; style?: React.CSSProperties }) {
   const { maskImage, ...frameStyle } = style || {};
   return (
     <div
+      data-player-art
       style={{
         width: 700,
         height: 660,
@@ -1498,6 +1607,8 @@ function RadarScene(props: Ctx) {
   const teamTotal = m.players
     .filter((x) => x.side === player.side)
     .reduce((sum, x) => sum + x.damage, 0);
+  const inventory =
+    !m.series && m.game !== "cs2" ? player.inventory : undefined;
   return (
     <AbsoluteFill>
       <div
@@ -1584,7 +1695,7 @@ function RadarScene(props: Ctx) {
               left: 1415,
               top: 211,
               width: 420,
-              height: 500,
+              height: inventory ? 400 : 500,
               opacity: 0.94,
               filter:
                 s.effects === "arena"
@@ -1681,6 +1792,13 @@ function RadarScene(props: Ctx) {
               </div>
             )}
           </div>
+          {inventory && (
+            <div
+              style={{ position: "absolute", left: 1105, right: 85, top: 638 }}
+            >
+              <Inventory inventory={inventory} palette={p} />
+            </div>
+          )}
           <div
             data-player-stats
             style={{
@@ -1822,6 +1940,11 @@ function RadarScene(props: Ctx) {
                   </span>
                 </span>
               </div>
+              {!m.series && m.game !== "cs2" && pl.inventory && (
+                <div style={{ marginTop: 24 }}>
+                  <Inventory inventory={pl.inventory} palette={p} compact />
+                </div>
+              )}
             </div>
           ))}
         </div>

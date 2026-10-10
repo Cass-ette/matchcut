@@ -14,6 +14,7 @@
     "players": [
       {
         "slot": 0,
+        "playerId": "100058342",
         "name": "skiter",
         "hero": "Ursa",
         "heroId": 70,
@@ -27,6 +28,64 @@
         "damage": 52413,
         "tower": 9034,
         "lastHits": 520,
+        "inventory": {
+          "main": [
+            {
+              "id": 116,
+              "name": "Black King Bar",
+              "image": "/assets/dota/items/116.png"
+            },
+            {
+              "id": 603,
+              "name": "Swift Blink",
+              "image": "/assets/dota/items/603.png"
+            },
+            {
+              "id": 208,
+              "name": "Abyssal Blade",
+              "image": "/assets/dota/items/208.png"
+            },
+            {
+              "id": 50,
+              "name": "Phase Boots",
+              "image": "/assets/dota/items/50.png"
+            },
+            {
+              "id": 145,
+              "name": "Battle Fury",
+              "image": "/assets/dota/items/145.png"
+            },
+            {
+              "id": 1097,
+              "name": "Disperser",
+              "image": "/assets/dota/items/1097.png"
+            }
+          ],
+          "backpack": [
+            {
+              "id": 26,
+              "name": "Morbid Mask"
+            },
+            {
+              "id": 43,
+              "name": "Sentry Ward"
+            },
+            {
+              "id": 5,
+              "name": "Claymore"
+            }
+          ],
+          "neutral": {
+            "id": 1860,
+            "name": "Prophet's Pendulum",
+            "image": "/assets/dota/items/1860.png"
+          },
+          "enhancement": {
+            "id": 1584,
+            "name": "Alert",
+            "image": "/assets/dota/items/1584.png"
+          }
+        },
         "positionEstimate": 1,
         "obs": 0,
         "sentries": 0,
@@ -36,6 +95,7 @@
       },
       {
         "slot": 1,
+        "playerId": "301750126",
         "name": "Mikoto",
         "hero": "Earth Spirit",
         "heroId": 107,
@@ -49,6 +109,58 @@
         "damage": 37050,
         "tower": 2354,
         "lastHits": 424,
+        "inventory": {
+          "main": [
+            {
+              "id": 63,
+              "name": "Power Treads",
+              "image": "/assets/dota/items/63.png"
+            },
+            {
+              "id": 119,
+              "name": "Shiva's Guard",
+              "image": "/assets/dota/items/119.png"
+            },
+            {
+              "id": 121,
+              "name": "Bloodstone",
+              "image": "/assets/dota/items/121.png"
+            },
+            {
+              "id": 116,
+              "name": "Black King Bar",
+              "image": "/assets/dota/items/116.png"
+            },
+            {
+              "id": 110,
+              "name": "Refresher Orb",
+              "image": "/assets/dota/items/110.png"
+            },
+            {
+              "id": 273,
+              "name": "Kaya and Sange",
+              "image": "/assets/dota/items/273.png"
+            }
+          ],
+          "backpack": [
+            null,
+            {
+              "id": 41,
+              "name": "Bottle"
+            },
+            null
+          ],
+          "neutral": {
+            "id": 1864,
+            "name": "Conjurer's Catalyst",
+            "image": "/assets/dota/items/1864.png"
+          },
+          "enhancement": {
+            "id": 1592,
+            "name": "Timeless",
+            "image": "/assets/dota/items/1592.png"
+          }
+        },
         "positionEstimate": 2,
         "obs": 1,
         "sentries": 0,
@@ -58,6 +170,7 @@
       },
       {
         "slot": 2,
+        "playerId": "126842529",
         "name": "Ws`",
         "hero": "Enigma",
         "heroId": 33,
@@ -71,6 +184,55 @@
         "damage": 30511,
         "tower": 8550,
         "lastHits": 392,
+        "inventory": {
+          "main": [
+            {
+              "id": 119,
+              "name": "Shiva's Guard",
+              "image": "/assets/dota/items/119.png"
+            },
+            {
+              "id": 1,
+              "name": "Blink Dagger",
+              "image": "/assets/dota/items/1.png"
+            },
+            {
+              "id": 116,
+              "name": "Black King Bar",
+              "image": "/assets/dota/items/116.png"
+            },
+            {
+              "id": 108,
+              "name": "Aghanim's Scepter",
+              "image": "/assets/dota/items/108.png"
+            },
+            {
+              "id": 110,
+              "name": "Refresher Orb",
+              "image": "/assets/dota/items/110.png"
+            },
+            {
+              "id": 152,
+              "name": "Shadow Blade",
+              "image": "/assets/dota/items/152.png"
+            }
+          ],
+          "backpack": [
+            null,
+            null,
+            null
+          ],
+          "neutral": {
+            "id": 840,
+            "name": "Tumbler's Toy",
+            "image": "/assets/dota/items/840.png"
+          },
+          "enhancement": {
+            "id": 1593,
+            "name": "Greedy",
+            "image": "/assets/dota/items/1593.png"
+          }
+        },
         "positionEstimate": 3,
         "obs": 0,
         "sentries": 3,
@@ -80,6 +242,7 @@
       },
       {
         "slot": 3,
+        "playerId": "256156323",
         "name": "Mira",
         "hero": "Nyx Assassin",
         "heroId": 88,
@@ -93,6 +256,51 @@
         "damage": 32035,
         "tower": 5,
         "lastHits": 30,
+        "inventory": {
+          "main": [
+            {
+              "id": 1,
+              "name": "Blink Dagger",
+              "image": "/assets/dota/items/1.png"
+            },
+            null,
+            {
+              "id": 102,
+              "name": "Force Staff",
+              "image": "/assets/dota/items/102.png"
+            },
+            {
+              "id": 100,
+              "name": "Eul's Scepter of Divinity",
+              "image": "/assets/dota/items/100.png"
+            },
+            {
+              "id": 1852,
+              "name": "Essence Distiller",
+              "image": "/assets/dota/items/1852.png"
+            },
+            {
+              "id": 29,
+              "name": "Boots of Speed",
+              "image": "/assets/dota/items/29.png"
+            }
+          ],
+          "backpack": [
+            null,
+            null,
+            null
+          ],
+          "neutral": {
+            "id": 585,
+            "name": "Stormcrafter",
+            "image": "/assets/dota/items/585.png"
+          },
+          "enhancement": {
+            "id": 1593,
+            "name": "Greedy",
+            "image": "/assets/dota/items/1593.png"
+          }
+        },
         "positionEstimate": 4,
         "obs": 9,
         "sentries": 14,
@@ -102,6 +310,7 @@
       },
       {
         "slot": 4,
+        "playerId": "320219866",
         "name": "kaori",
         "hero": "Warlock",
         "heroId": 37,
@@ -115,6 +324,54 @@
         "damage": 17661,
         "tower": 2861,
         "lastHits": 165,
+        "inventory": {
+          "main": [
+            {
+              "id": 102,
+              "name": "Force Staff",
+              "image": "/assets/dota/items/102.png"
+            },
+            null,
+            {
+              "id": 110,
+              "name": "Refresher Orb",
+              "image": "/assets/dota/items/110.png"
+            },
+            {
+              "id": 108,
+              "name": "Aghanim's Scepter",
+              "image": "/assets/dota/items/108.png"
+            },
+            {
+              "id": 81,
+              "name": "Vladmir's Offering",
+              "image": "/assets/dota/items/81.png"
+            },
+            {
+              "id": 180,
+              "name": "Arcane Boots",
+              "image": "/assets/dota/items/180.png"
+            }
+          ],
+          "backpack": [
+            {
+              "id": 188,
+              "name": "Smoke of Deceit"
+            },
+            null,
+            null
+          ],
+          "neutral": {
+            "id": 1860,
+            "name": "Prophet's Pendulum",
+            "image": "/assets/dota/items/1860.png"
+          },
+          "enhancement": {
+            "id": 1577,
+            "name": "Quickened",
+            "image": "/assets/dota/items/1577.png"
+          }
+        },
         "positionEstimate": 5,
         "obs": 16,
         "sentries": 31,
@@ -124,6 +381,7 @@
       },
       {
         "slot": 128,
+        "playerId": "86698277",
         "name": "33",
         "hero": "Night Stalker",
         "heroId": 60,
@@ -137,6 +395,54 @@
         "damage": 20715,
         "tower": 460,
         "lastHits": 316,
+        "inventory": {
+          "main": [
+            {
+              "id": 1,
+              "name": "Blink Dagger",
+              "image": "/assets/dota/items/1.png"
+            },
+            {
+              "id": 100,
+              "name": "Eul's Scepter of Divinity",
+              "image": "/assets/dota/items/100.png"
+            },
+            {
+              "id": 63,
+              "name": "Power Treads",
+              "image": "/assets/dota/items/63.png"
+            },
+            null,
+            {
+              "id": 225,
+              "name": "Nullifier",
+              "image": "/assets/dota/items/225.png"
+            },
+            {
+              "id": 116,
+              "name": "Black King Bar",
+              "image": "/assets/dota/items/116.png"
+            }
+          ],
+          "backpack": [
+            null,
+            {
+              "id": 40,
+              "name": "Dust of Appearance"
+            },
+            null
+          ],
+          "neutral": {
+            "id": 1168,
+            "name": "Rattlecage",
+            "image": "/assets/dota/items/1168.png"
+          },
+          "enhancement": {
+            "id": 1577,
+            "name": "Quickened",
+            "image": "/assets/dota/items/1577.png"
+          }
+        },
         "positionEstimate": 3,
         "obs": 0,
         "sentries": 0,
@@ -146,6 +452,7 @@
       },
       {
         "slot": 129,
+        "playerId": "346412363",
         "name": "Ari",
         "hero": "Hoodwink",
         "heroId": 123,
@@ -159,6 +466,54 @@
         "damage": 23683,
         "tower": 367,
         "lastHits": 151,
+        "inventory": {
+          "main": [
+            {
+              "id": 29,
+              "name": "Boots of Speed",
+              "image": "/assets/dota/items/29.png"
+            },
+            {
+              "id": 1,
+              "name": "Blink Dagger",
+              "image": "/assets/dota/items/1.png"
+            },
+            {
+              "id": 610,
+              "name": "Wind Waker",
+              "image": "/assets/dota/items/610.png"
+            },
+            null,
+            {
+              "id": 218,
+              "name": "Observer and Sentry Wards",
+              "image": "/assets/dota/items/218.png"
+            },
+            {
+              "id": 1852,
+              "name": "Essence Distiller",
+              "image": "/assets/dota/items/1852.png"
+            }
+          ],
+          "backpack": [
+            null,
+            {
+              "id": 188,
+              "name": "Smoke of Deceit"
+            },
+            null
+          ],
+          "neutral": {
+            "id": 1864,
+            "name": "Conjurer's Catalyst",
+            "image": "/assets/dota/items/1864.png"
+          },
+          "enhancement": {
+            "id": 1577,
+            "name": "Quickened",
+            "image": "/assets/dota/items/1577.png"
+          }
+        },
         "positionEstimate": 4,
         "obs": 6,
         "sentries": 10,
@@ -168,6 +523,7 @@
       },
       {
         "slot": 130,
+        "playerId": "136829091",
         "name": "Whitemon",
         "hero": "Techies",
         "heroId": 105,
@@ -181,6 +537,51 @@
         "damage": 33290,
         "tower": 138,
         "lastHits": 109,
+        "inventory": {
+          "main": [
+            {
+              "id": 36,
+              "name": "Magic Wand",
+              "image": "/assets/dota/items/36.png"
+            },
+            {
+              "id": 48,
+              "name": "Boots of Travel",
+              "image": "/assets/dota/items/48.png"
+            },
+            {
+              "id": 102,
+              "name": "Force Staff",
+              "image": "/assets/dota/items/102.png"
+            },
+            {
+              "id": 100,
+              "name": "Eul's Scepter of Divinity",
+              "image": "/assets/dota/items/100.png"
+            },
+            {
+              "id": 1854,
+              "name": "Consecrated Wraps",
+              "image": "/assets/dota/items/1854.png"
+            },
+            null
+          ],
+          "backpack": [
+            null,
+            null,
+            null
+          ],
+          "neutral": {
+            "id": 1720,
+            "name": "Idol of Scree'auk",
+            "image": "/assets/dota/items/1720.png"
+          },
+          "enhancement": {
+            "id": 1592,
+            "name": "Timeless",
+            "image": "/assets/dota/items/1592.png"
+          }
+        },
         "positionEstimate": 5,
         "obs": 17,
         "sentries": 34,
@@ -190,6 +591,7 @@
       },
       {
         "slot": 131,
+        "playerId": "93618577",
         "name": "bzm",
         "hero": "Ember Spirit",
         "heroId": 106,
@@ -203,6 +605,55 @@
         "damage": 43493,
         "tower": 700,
         "lastHits": 510,
+        "inventory": {
+          "main": [
+            {
+              "id": 108,
+              "name": "Aghanim's Scepter",
+              "image": "/assets/dota/items/108.png"
+            },
+            {
+              "id": 1575,
+              "name": "Orb of Frost",
+              "image": "/assets/dota/items/1575.png"
+            },
+            {
+              "id": 119,
+              "name": "Shiva's Guard",
+              "image": "/assets/dota/items/119.png"
+            },
+            {
+              "id": 63,
+              "name": "Power Treads",
+              "image": "/assets/dota/items/63.png"
+            },
+            {
+              "id": 116,
+              "name": "Black King Bar",
+              "image": "/assets/dota/items/116.png"
+            },
+            {
+              "id": 273,
+              "name": "Kaya and Sange",
+              "image": "/assets/dota/items/273.png"
+            }
+          ],
+          "backpack": [
+            null,
+            null,
+            null
+          ],
+          "neutral": {
+            "id": 1864,
+            "name": "Conjurer's Catalyst",
+            "image": "/assets/dota/items/1864.png"
+          },
+          "enhancement": {
+            "id": 1577,
+            "name": "Quickened",
+            "image": "/assets/dota/items/1577.png"
+          }
+        },
         "positionEstimate": 2,
         "obs": 1,
         "sentries": 1,
@@ -212,6 +663,7 @@
       },
       {
         "slot": 132,
+        "playerId": "331855530",
         "name": "Pure",
         "hero": "Kez",
         "heroId": 145,
@@ -225,6 +677,58 @@
         "damage": 55502,
         "tower": 3936,
         "lastHits": 733,
+        "inventory": {
+          "main": [
+            {
+              "id": 598,
+              "name": "Mage Slayer",
+              "image": "/assets/dota/items/598.png"
+            },
+            {
+              "id": 208,
+              "name": "Abyssal Blade",
+              "image": "/assets/dota/items/208.png"
+            },
+            {
+              "id": 603,
+              "name": "Swift Blink",
+              "image": "/assets/dota/items/603.png"
+            },
+            {
+              "id": 168,
+              "name": "Desolator",
+              "image": "/assets/dota/items/168.png"
+            },
+            {
+              "id": 141,
+              "name": "Daedalus",
+              "image": "/assets/dota/items/141.png"
+            },
+            {
+              "id": 116,
+              "name": "Black King Bar",
+              "image": "/assets/dota/items/116.png"
+            }
+          ],
+          "backpack": [
+            null,
+            {
+              "id": 63,
+              "name": "Power Treads"
+            },
+            null
+          ],
+          "neutral": {
+            "id": 1860,
+            "name": "Prophet's Pendulum",
+            "image": "/assets/dota/items/1860.png"
+          },
+          "enhancement": {
+            "id": 1584,
+            "name": "Alert",
+            "image": "/assets/dota/items/1584.png"
+          }
+        },
         "positionEstimate": 1,
         "obs": 0,
         "sentries": 0,
@@ -456,11 +960,15 @@
       }
     ],
     "source": "https://www.opendota.com/matches/9035078952",
-    "fetchedAt": "2026-10-08T17:53:45.401944+00:00"
+    "fetchedAt": "2026-10-08T17:53:45.401944+00:00",
+    "logoReview": [],
+    "radiantLogo": "/assets/teams/dota-aurora.png",
+    "direLogo": "/assets/teams/dota-1win.png"
   },
   "settings": {
     "theme": "ember",
     "effects": "arena",
+    "playerVisual": "hero",
     "accent": "#ff6138",
     "secondary": "#50d9ed",
     "brand": "赛后雷达",

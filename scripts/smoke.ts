@@ -6,6 +6,11 @@ import path from "node:path";
 import { browserPath } from "../server/render";
 import { comparisons } from "../src/domain";
 
+if (process.argv.includes("--items")) {
+  await import("./items-smoke");
+  process.exit(0);
+}
+
 if (process.argv.includes("--cs")) {
   await import("./cs-smoke");
   process.exit(0);

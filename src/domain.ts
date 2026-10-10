@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeDotaInventory, type PlayerInventory } from "./items";
 
 export const FPS = 30;
 export const VIDEO_WIDTH = 1920;
@@ -180,6 +181,7 @@ export type PlayerData = {
   playerId?: string;
   playerImage?: string;
   playerArtwork?: string;
+  inventory?: PlayerInventory;
   side: "radiant" | "dire";
   kills: number;
   deaths: number;
@@ -235,6 +237,7 @@ export type MatchData = {
   objectives?: { label: string; radiant?: number; dire?: number }[];
   gameNumber?: number;
   patch?: string;
+  inventorySource?: { url: string; fetchedAt: string; timestamp: string };
   cs?: {
     version: "CS2" | "CSGO";
     map: string;
@@ -349,6 +352,7 @@ export function normalizeMatch(
       damage: finite(p.hero_damage, "英雄伤害"),
       tower: finite(p.tower_damage, "建筑伤害"),
       lastHits: finite(p.last_hits, "补刀"),
+      inventory: normalizeDotaInventory(p),
       positionEstimate: POSITIONS.includes(p.position_est)
         ? p.position_est
         : undefined,

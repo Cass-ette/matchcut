@@ -57,6 +57,7 @@ import {
   ensureMediaIndex,
 } from "./media-index";
 import { Thumbnails } from "./thumbnails";
+import { lolItems } from "./lol-items";
 
 const loadAnyMatch = (id: string) =>
   id.startsWith("cs2-")
@@ -397,6 +398,14 @@ app.post(
 app.get(
   "/api/lol/matches",
   wrap(async (_req, res) => res.json(await listLolMatches())),
+);
+app.post(
+  "/api/lol/items/:id",
+  wrap(async (req, res) => {
+    const { match } = await loadLolMatch(String(req.params.id));
+    await lolItems.sync(match);
+    res.json({ match });
+  }),
 );
 app.get(
   "/api/lol/series/:id",

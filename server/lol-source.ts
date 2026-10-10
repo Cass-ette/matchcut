@@ -25,6 +25,7 @@ import {
 } from "../src/series";
 import { mediaLibrary, type TeamSummary } from "./media-source";
 import { localStore } from "./local-store";
+import { lolItems } from "./lol-items";
 import {
   ArchiveIndex,
   fileVersion,
@@ -189,6 +190,7 @@ export async function loadLolMatch(id: string) {
   const task = assetQueue.then(() => attachAssets(match));
   assetQueue = task.catch(() => {});
   await task;
+  await lolItems.applyCached(match);
   await mediaLibrary.apply(match);
   return { match, raw, cached: true };
 }

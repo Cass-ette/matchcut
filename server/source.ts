@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_MATCH, normalizeMatch, type MatchData } from "../src/domain";
 import { mediaLibrary } from "./media-source";
+import { dotaItemAssets } from "./item-source";
 
 const root = process.cwd();
 const cache = path.join(root, "data/cache");
@@ -169,6 +170,7 @@ export async function loadMatch(
   if (!cached) await writeFile(file, JSON.stringify({ fetchedAt, raw }));
   await ensurePortraits(match, hero);
   await ensureArtwork(match, hero);
+  await dotaItemAssets.apply(match);
   await mediaLibrary.apply(match);
   return { match, raw, cached };
 }

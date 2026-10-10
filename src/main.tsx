@@ -151,6 +151,7 @@ function App() {
   const [csMatches, setCsMatches] = useState<CsSummary[]>([]);
   const [csSearch, setCsSearch] = useState("");
   const [csImporting, setCsImporting] = useState(false);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const [bgmTracks, setBgmTracks] = useState<BgmTrack[]>([]);
   const bgmInput = useRef<HTMLInputElement>(null),
     bgmPreview = useRef<HTMLAudioElement>(null);
@@ -357,6 +358,25 @@ function App() {
       setError((e as Error).message);
     } finally {
       setLoading(false);
+    }
+  }
+  async function syncLolItems() {
+    if (!match || match.game !== "lol" || match.series) return;
+    setLoading(true);
+    setItemsLoading(true);
+    setError("");
+    try {
+      const data = await api("/api/lol/items/" + encodeURIComponent(match.id), {
+        method: "POST",
+      });
+      setMatch(data.match);
+      setResult(null);
+      setToast("已核对并保存这局的赛末装备记录");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+      setItemsLoading(false);
     }
   }
   async function showRecent() {
@@ -987,6 +1007,32 @@ function App() {
                       局。灰色局数表示尚未导入，不会用末局替代其他局。
                     </p>
                   )}
+                </div>
+              )}
+              {!match.series && (
+                <div className="lol-items-source">
+                  <button
+                    className="csv-import"
+                    disabled={loading || busy}
+                    onClick={() => void syncLolItems()}
+                  >
+                    {itemsLoading ? (
+                      <LoaderCircle size={16} className="spin" />
+                    ) : (
+                      <RefreshCw size={16} />
+                    )}
+                    {itemsLoading
+                      ? "正在核对装备…"
+                      : match.inventorySource
+                        ? "更新赛末装备"
+                        : "获取赛末装备"}
+                  </button>
+                  <p>
+                    {match.inventorySource
+                      ? "装备已保存在本机，可离线使用。"
+                      : "从官方赛事记录核对当前局，首次获取需要联网。"}
+                    包含饰品与消耗品，按官方列表展示。
+                  </p>
                 </div>
               )}
               {importReport && (
