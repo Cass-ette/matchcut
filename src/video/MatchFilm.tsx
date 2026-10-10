@@ -47,13 +47,10 @@ import {
   bgmVolume,
 } from "../domain";
 
-// Orbitron supplies Latin lettering; use the bundled Chinese face before any
-// system fallback in every video text style, including new tables and labels.
-const font = '"Arial", "ZCOOL QingKe HuangYou", "PingFang SC", sans-serif';
-const display =
-  '"Orbitron", "ZCOOL QingKe HuangYou", "Arial Black", "PingFang SC", sans-serif';
-const heading = display;
-const mono = '"SF Mono", "Menlo", "ZCOOL QingKe HuangYou", monospace';
+// One stack throughout the film: Orbitron for Latin text and numbers, then the
+// bundled Chinese face. Small labels and chart axes must use the same faces.
+const font = '"Orbitron", "ZCOOL QingKe HuangYou", sans-serif';
+const display = font;
 export const palettes = {
   obsidian: {
     bg: "#080706",
@@ -106,7 +103,7 @@ const fit = (text: string, max: number, base: number) =>
         [...text].reduce((n, c) => n + (c.charCodeAt(0) > 255 ? 1 : 0.62), 0),
       ),
   );
-// Orbitron's wide letterforms need more room than the body font.
+// Leave enough room for Orbitron's wide letterforms.
 const fitDisplay = (text: string, max: number, base: number) =>
   fit(text, max * 0.78, base);
 const asset = (path: string) => staticFile(path.replace(/^\//, ""));
@@ -165,7 +162,7 @@ function Inventory({
       ) : item ? (
         <span
           style={{
-            fontFamily: mono,
+            fontFamily: font,
             fontSize: compact ? 12 : 15,
             color: palette.dim,
           }}
@@ -645,7 +642,7 @@ function Title({
       <div
         style={{
           fontSize: 54,
-          fontFamily: heading,
+          fontFamily: font,
           fontWeight: 900,
           marginTop: 12,
           letterSpacing: 1,
@@ -869,7 +866,7 @@ function SeriesGames({ props }: { props: Ctx }) {
               overflow: "hidden",
             }}
           >
-            <div style={{ fontFamily: mono, color: p.dim, fontSize: 18 }}>
+            <div style={{ fontFamily: font, color: p.dim, fontSize: 18 }}>
               G{game.gameNumber || "?"}{" "}
               <span style={{ float: "right" }}>
                 {matchDuration(game.duration)}
@@ -925,7 +922,7 @@ function Intro(props: Ctx) {
         </Tag>
         <div
           style={{
-            fontFamily: heading,
+            fontFamily: font,
             fontSize: fitDisplay(s.headline, 1190, 67),
             fontWeight: 900,
             lineHeight: 1.3,
@@ -963,7 +960,7 @@ function Intro(props: Ctx) {
                 </span>
                 <span
                   style={{
-                    fontFamily: mono,
+                    fontFamily: font,
                     fontSize: 66,
                     color: p.dim,
                     paddingBottom: 15,
@@ -1170,7 +1167,7 @@ function Intro(props: Ctx) {
             {m.cs.map.toUpperCase()}
           </span>
         )}
-        <span style={{ fontFamily: mono }}>{m.date.slice(0, 10)}</span>
+        <span>{m.date.slice(0, 10)}</span>
       </div>
     </AbsoluteFill>
   );
@@ -1263,7 +1260,7 @@ function Economy(props: Ctx) {
                 fill={p.dim}
                 fontSize="19"
                 textAnchor="end"
-                fontFamily={mono}
+                fontFamily={font}
               >
                 {compact(v * max)}
               </text>
@@ -1280,7 +1277,7 @@ function Economy(props: Ctx) {
               textAnchor="middle"
               fill={p.dim}
               fontSize="20"
-              fontFamily={mono}
+              fontFamily={font}
             >
               {t}:00
             </text>
@@ -1984,7 +1981,7 @@ function RadarScene(props: Ctx) {
               data-player-name
               style={{
                 ...digits,
-                fontSize: fit(player.name, 250, 64),
+                fontSize: fitDisplay(player.name, 250, 64),
                 marginTop: 20,
                 lineHeight: 1.2,
                 overflowWrap: "anywhere",
@@ -2178,7 +2175,7 @@ function RadarScene(props: Ctx) {
                       style={{
                         fontFamily: display,
                         fontWeight: 900,
-                        fontSize: fit(pl.name, 230, 29),
+                        fontSize: fitDisplay(pl.name, 230, 29),
                         color: teamColor(pl, s),
                       }}
                     >
@@ -2314,7 +2311,7 @@ function Damage(props: Ctx) {
         <div
           style={{
             ...digits,
-            fontSize: fit(leader.name, 600, 64),
+            fontSize: fitDisplay(leader.name, 600, 64),
             margin: "14px 0 18px",
           }}
         >
@@ -2434,12 +2431,7 @@ function MvpScene(props: Ctx) {
   const p = palettes[s.theme];
   const { player, kind } = selection;
   const color = teamColor(player, s);
-  const label =
-    kind === "official"
-      ? `官方 MVP · ${selection.sourceName}`
-      : kind === "manual"
-        ? "手动选择"
-        : "伤害最高";
+  const teamLogo = m[`${player.side}Logo`];
   const shares = playerShares(m, player);
   return (
     <AbsoluteFill>
@@ -2489,7 +2481,7 @@ function MvpScene(props: Ctx) {
         data-mvp-identity
         style={{ position: "absolute", left: 900, right: 88, top: 292 }}
       >
-        <Tag color={color}>{label}</Tag>
+        <Tag color={color}>{kind === "official" ? "官方 MVP" : "本局最佳"}</Tag>
         <div
           data-mvp-name
           style={{
@@ -2501,15 +2493,69 @@ function MvpScene(props: Ctx) {
         >
           {player.name}
         </div>
-        <div style={{ color: p.dim, fontSize: 26, marginTop: 14 }}>
-          {m[player.side]} · {player.hero}
+        <div
+          data-mvp-badges
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 16,
+            height: 64,
+            boxSizing: "border-box",
+            padding: "5px 14px",
+            marginTop: 22,
+            border: "1px solid " + color + "35",
+            borderRadius: 8,
+            background: `linear-gradient(100deg, ${color}14, ${p.panel}80)`,
+          }}
+        >
+          <div
+            data-mvp-team
+            title={m[player.side]}
+            style={{
+              width: 66,
+              height: 52,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color,
+              ...digits,
+              fontSize: fitDisplay(teamInitials(m[player.side]), 66, 24),
+            }}
+          >
+            {teamLogo ? (
+              <Img
+                src={asset(teamLogo)}
+                alt={m[player.side]}
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
+            ) : (
+              teamInitials(m[player.side])
+            )}
+          </div>
+          {player.image && (
+            <>
+              <div style={{ width: 1, height: 30, background: color + "40" }} />
+              <Img
+                data-mvp-hero
+                src={asset(player.image)}
+                alt={player.hero}
+                title={player.hero}
+                style={{
+                  width: m.game === "lol" ? 52 : 88,
+                  height: 52,
+                  objectFit: "cover",
+                  borderRadius: 4,
+                }}
+              />
+            </>
+          )}
         </div>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr 1fr",
             gap: 22,
-            marginTop: 70,
+            marginTop: 34,
           }}
         >
           {[
@@ -2547,7 +2593,7 @@ function MvpScene(props: Ctx) {
         </div>
         <div
           style={{
-            marginTop: 58,
+            marginTop: 42,
             paddingTop: 22,
             borderTop: "1px solid " + p.line,
           }}
@@ -2657,7 +2703,7 @@ function Outro(props: Ctx) {
         </div>
         <div
           style={{
-            fontSize: fit(s.outro, 1020, 31),
+            fontSize: fitDisplay(s.outro, 1020, 31),
             lineHeight: 1.4,
             color: p.dim,
             marginTop: 58,
@@ -2681,7 +2727,7 @@ function Outro(props: Ctx) {
         }}
       >
         <span>{m.league}</span>
-        <span style={{ fontFamily: mono }}>{m.date.slice(0, 10)}</span>
+        <span>{m.date.slice(0, 10)}</span>
       </div>
     </AbsoluteFill>
   );
@@ -2803,6 +2849,7 @@ export function MatchFilm(props: VideoProps) {
             ),
         )}
         <div
+          data-film-header
           style={{
             position: "absolute",
             left: 84,
@@ -2816,7 +2863,15 @@ export function MatchFilm(props: VideoProps) {
             paddingBottom: 20,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            data-film-brand
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              flexShrink: 0,
+            }}
+          >
             <span
               style={{
                 width: 11,
@@ -2836,9 +2891,9 @@ export function MatchFilm(props: VideoProps) {
               {s.brand}
             </span>
             <span
+              data-film-game
               style={{
                 color: p.dim,
-                fontFamily: mono,
                 fontSize: 17,
                 marginLeft: 17,
               }}
@@ -2849,8 +2904,11 @@ export function MatchFilm(props: VideoProps) {
           <span
             data-film-scope
             style={{
-              fontSize: fit(m.league + scope + gameResult, 820, 20),
+              fontSize: fitDisplay(m.league + scope + gameResult, 780, 20),
               color: p.dim,
+              maxWidth: 820,
+              marginLeft: 32,
+              textAlign: "right",
             }}
           >
             {m.league}
@@ -2915,7 +2973,7 @@ export function MatchFilm(props: VideoProps) {
                 <span
                   style={{
                     color: slot === sceneIndex ? s.accent : undefined,
-                    fontFamily: mono,
+                    fontFamily: font,
                     marginRight: 8,
                   }}
                 >
