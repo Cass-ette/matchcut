@@ -184,6 +184,8 @@ npm run smoke -- --cs --render
 
 渲染使用 Chromium。程序优先使用本机已安装的 Playwright Headless Chromium，也可用 `MATCHCUT_BROWSER=/absolute/path/to/chrome` 指定；没有可用浏览器时由 Remotion 下载。默认本地地址为 `127.0.0.1:4317`，不向局域网开放。若使用 `PORT` 更换端口，双击启动脚本中的地址也应同步修改。
 
+视频导出默认同时使用 2 个 Chromium 渲染进程，给浏览器和系统保留资源。性能充足的机器可在启动前设置 `MATCHCUT_RENDER_CONCURRENCY=3` 或更高；数值会受 CPU 核数限制。
+
 ## 参考与素材
 
 - [Rock-Radar / TablemanLiu](https://github.com/TablemanLiu/Rock-Radar)（MIT）：雷达主视觉、选手聚焦和动效风格参考。Matchcut 的排版与帧动画独立实现。

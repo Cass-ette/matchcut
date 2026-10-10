@@ -4,6 +4,7 @@ import { Player, PlayerRef } from "@remotion/player";
 import {
   ArrowDownToLine,
   ArrowRight,
+  Award,
   AudioLines,
   Check,
   CheckCircle2,
@@ -705,6 +706,38 @@ function App() {
   );
   const activeMatch = activeScene.match;
   const positions = positionNames(activeMatch);
+  const mvpGames = cs ? [] : (match.fullGames ?? (match.series ? [] : [match]));
+  const sceneDescription = (slot: number) => {
+    if (slot === 0)
+      return activeMatch.series ? "已收录局比分与逐局胜者" : "最终赛果与看点";
+    if (slot === 1)
+      return activeMatch.series
+        ? "各局资源合计"
+        : activeMatch.game === "lol"
+          ? "终局经济与地图资源"
+          : "优势随时间的变化";
+    if (slot === 2)
+      return settings.radarMode === "damage"
+        ? "双方伤害最高"
+        : settings.radarPosition === "all"
+          ? cs
+            ? settings.radarMode === "ranked"
+              ? "双方 K / D / A 排名前五"
+              : "五组手动位置"
+            : activeMatch.game === "lol"
+              ? "上 / 野 / 中 / 下 / 辅"
+              : "一至五号位 · 五组对位"
+          : positions[Number(settings.radarPosition) as 1 | 2 | 3 | 4 | 5];
+    if (slot === 3)
+      return cs
+        ? "击杀多、死亡少、助攻多"
+        : activeMatch.series
+          ? "选手累计输出前五"
+          : "全场输出前五";
+    if (slot === 5) return "完整排名中的伤害后五";
+    if (slot === 6) return "本局 MVP 选手与关键数据";
+    return "比分与赛果回顾";
+  };
   const matchups = comparisons(activeMatch, activeScene.settings);
   const assigned = assignedPositions(match, settings);
   const radarScene = scenes.find((s) => s.slot === 2);
@@ -1340,40 +1373,7 @@ function App() {
                 </span>
                 <div>
                   <b>{name}</b>
-                  <small>
-                    {
-                      [
-                        activeMatch.series
-                          ? "已收录局比分与逐局胜者"
-                          : "最终赛果与看点",
-                        activeMatch.series
-                          ? "各局资源合计"
-                          : lol
-                            ? "终局经济与地图资源"
-                            : "优势随时间的变化",
-                        settings.radarMode === "damage"
-                          ? "双方伤害最高"
-                          : settings.radarPosition === "all"
-                            ? cs
-                              ? settings.radarMode === "ranked"
-                                ? "双方 K / D / A 排名前五"
-                                : "五组手动位置"
-                              : lol
-                                ? "上 / 野 / 中 / 下 / 辅"
-                                : "一至五号位 · 五组对位"
-                            : positions[
-                                Number(settings.radarPosition) as
-                                  1 | 2 | 3 | 4 | 5
-                              ],
-                        cs
-                          ? "击杀多、死亡少、助攻多"
-                          : activeMatch.series
-                            ? "选手累计输出前五"
-                            : "全场输出前五",
-                        "比分与赛果回顾",
-                      ][slot]
-                    }
-                  </small>
+                  <small>{sceneDescription(slot)}</small>
                 </div>
                 <span className="scene-time">
                   {Math.round(props.segments[i].frames / FPS)}s
@@ -1945,6 +1945,87 @@ function App() {
                   <i />
                 </label>
               ))}
+              {!cs && (
+                <>
+                  <label className="toggle-row">
+                    <span>
+                      <b>
+                        <Award size={14} /> MVP 展示
+                      </b>
+                      <small>每局伤害榜后展示本局 MVP</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={settings.mvp.enabled}
+                      disabled={Boolean(match.series && !match.fullGames)}
+                      onChange={(e) =>
+                        patch("mvp", {
+                          ...settings.mvp,
+                          enabled: e.target.checked,
+                        })
+                      }
+                    />
+                    <i />
+                  </label>
+                  {match.series && !match.fullGames && (
+                    <div className="small-notice">
+                      MVP 需要逐局数据，请切换到完整视频后启用。
+                    </div>
+                  )}
+                  {settings.mvp.enabled && mvpGames.length > 0 && (
+                    <>
+                      <label className="field-label">MVP 选择</label>
+                      <select
+                        aria-label="MVP 选择模式"
+                        value={settings.mvp.mode}
+                        onChange={(e) =>
+                          patch("mvp", {
+                            ...settings.mvp,
+                            mode: e.target.value as Settings["mvp"]["mode"],
+                          })
+                        }
+                      >
+                        <option value="auto">
+                          自动 · 官方优先，无记录则伤害最高
+                        </option>
+                        <option value="manual">手动指定每局 MVP</option>
+                      </select>
+                      {settings.mvp.mode === "manual" &&
+                        mvpGames.map((game) => (
+                          <React.Fragment key={game.id}>
+                            <label className="field-label">
+                              {game.gameNumber ? `G${game.gameNumber}` : "本局"}{" "}
+                              MVP
+                            </label>
+                            <select
+                              aria-label={`${game.gameNumber ? `G${game.gameNumber}` : "本局"} MVP`}
+                              value={
+                                settings.mvp.manual[game.id] === undefined
+                                  ? ""
+                                  : String(settings.mvp.manual[game.id])
+                              }
+                              onChange={(e) => {
+                                const manual = { ...settings.mvp.manual };
+                                if (e.target.value)
+                                  manual[game.id] = Number(e.target.value);
+                                else delete manual[game.id];
+                                patch("mvp", { ...settings.mvp, manual });
+                              }}
+                            >
+                              <option value="">自动选择</option>
+                              {game.players.map((player) => (
+                                <option key={player.slot} value={player.slot}>
+                                  {player.name} · {game[player.side]} ·{" "}
+                                  {player.hero}
+                                </option>
+                              ))}
+                            </select>
+                          </React.Fragment>
+                        ))}
+                    </>
+                  )}
+                </>
+              )}
               <label className="field-label">选手画面</label>
               {!cs && (
                 <select
@@ -2037,41 +2118,43 @@ function App() {
                 value={settings.headline}
                 onChange={(e) => patch("headline", e.target.value)}
               />
-              {scenes.map(({ name, index: i, slot, chapter }, order) => (
-                <div className="script-block" key={name}>
-                  <label className="field-label">
-                    {chapter ? chapter.label + " · " : ""}
-                    {name}
-                  </label>
-                  <textarea
-                    rows={4}
-                    aria-label={name + "文案"}
-                    value={props.segments[i].text}
-                    maxLength={240}
-                    onChange={(e) => {
-                      if (
-                        chapter &&
-                        !chapter.match.series &&
-                        props.chapters!.length > 1
-                      ) {
-                        patch("gameScripts", {
-                          ...settings.gameScripts,
-                          [chapter.key]: chapter.settings.scripts.map(
-                            (text, j) => (j === slot ? e.target.value : text),
-                          ),
-                        });
-                      } else {
-                        patch(
-                          "scripts",
-                          settings.scripts.map((text, j) =>
-                            j === slot ? e.target.value : text,
-                          ),
-                        );
-                      }
-                    }}
-                  />
-                </div>
-              ))}
+              {scenes
+                .filter(({ slot }) => slot !== 5 && slot !== 6)
+                .map(({ name, index: i, slot, chapter }, order) => (
+                  <div className="script-block" key={name}>
+                    <label className="field-label">
+                      {chapter ? chapter.label + " · " : ""}
+                      {name}
+                    </label>
+                    <textarea
+                      rows={4}
+                      aria-label={name + "文案"}
+                      value={props.segments[i].text}
+                      maxLength={240}
+                      onChange={(e) => {
+                        if (
+                          chapter &&
+                          !chapter.match.series &&
+                          props.chapters!.length > 1
+                        ) {
+                          patch("gameScripts", {
+                            ...settings.gameScripts,
+                            [chapter.key]: chapter.settings.scripts.map(
+                              (text, j) => (j === slot ? e.target.value : text),
+                            ),
+                          });
+                        } else {
+                          patch(
+                            "scripts",
+                            settings.scripts.map((text, j) =>
+                              j === slot ? e.target.value : text,
+                            ),
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
               <label className="field-label">结尾画面文字</label>
               <textarea
                 rows={2}

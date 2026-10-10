@@ -37,6 +37,7 @@ const initialSettings = {
   ...defaultSettings(single.match),
   radarPosition: "3",
   pace: "snappy",
+  mvp: { enabled: true, mode: "auto" as const, manual: {} },
 };
 let preferences: any;
 const browserExecutable = await browserPath();
@@ -85,7 +86,7 @@ try {
   for (let c = 0; c < ids.length + 2; c++) {
     await page.locator(".chapter-strip button").nth(c).click();
     const count = await page.locator(".scene-strip button").count();
-    assert.equal(count, c === 0 ? 1 : c === ids.length + 1 ? 4 : 3);
+    assert.equal(count, c === 0 ? 1 : 5);
     for (let s = 0; s < count; s++) {
       await page.locator(".scene-strip button").nth(s).click();
       await page.waitForTimeout(180);

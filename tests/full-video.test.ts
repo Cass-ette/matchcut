@@ -34,7 +34,7 @@ test("full film orders all source games, opens and closes once, and omits repeat
     props.chapters!.map((c) => c.label),
     ["开场", "G1", "G2", "G3", "系列赛汇总"],
   );
-  assert.equal(scenes.length, 14);
+  assert.equal(scenes.length, 18);
   assert.equal(scenes.filter((s) => s.slot === 0).length, 1);
   assert.equal(scenes.filter((s) => s.slot === 4).length, 1);
   assert.deepEqual(
@@ -143,7 +143,7 @@ test("one recorded game removes aggregate duplication; partial and malformed arc
   const single = fixture([76145]);
   const props = previewProps(single, defaultSettings(single));
   assert.equal(props.chapters!.length, 1);
-  assert.deepEqual(props.chapters![0].slots, [0, 1, 2, 3, 4]);
+  assert.deepEqual(props.chapters![0].slots, [0, 1, 2, 3, 5, 4]);
   assert.equal(props.chapters![0].match.series, undefined);
   const partial = fixture([76144, 76146]);
   assert.deepEqual(partial.series!.missingGames, [2]);
@@ -157,5 +157,21 @@ test("one recorded game removes aggregate duplication; partial and malformed arc
   assert.throws(
     () => previewProps(partial, defaultSettings(partial)),
     /缺少逐局数据/,
+  );
+});
+
+test("full videos put an MVP after each game's complete damage ranking, never in the series aggregate", () => {
+  const match = fixture();
+  const settings = defaultSettings(match);
+  settings.mvp = { enabled: true, mode: "manual", manual: {} };
+  for (const game of match.fullGames!)
+    settings.mvp.manual[game.id] = game.players[0].slot;
+  const props = previewProps(match, settings);
+  const games = props.chapters!.filter((chapter) => !chapter.match.series);
+  assert.ok(games.every((chapter) => chapter.slots.at(-1) === 6));
+  assert.deepEqual(props.chapters!.at(-1)!.slots, [1, 2, 3, 5, 4]);
+  assert.equal(
+    videoScenes(props).filter((scene) => scene.slot === 6).length,
+    3,
   );
 });

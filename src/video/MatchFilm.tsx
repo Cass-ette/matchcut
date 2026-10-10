@@ -39,6 +39,7 @@ import {
   facts,
   getFocus,
   matchDuration,
+  mvpFor,
   num,
   radar,
   sortedDamage,
@@ -2255,16 +2256,34 @@ function Damage(props: Ctx) {
   const { match: m, settings: s } = props;
   const p = palettes[s.theme],
     frame = useCurrentFrame(),
-    players = rankedPlayers(m).slice(0, 5),
-    leader = players[0],
-    color = teamColor(leader, s);
+    ranking = rankedPlayers(m),
+    portraitCandidates = ranking.filter((player) => {
+      if (m.game === "cs2") return true;
+      const assigned = assignedPositions(m, s).find(
+        (entry) => entry.player.slot === player.slot,
+      );
+      return !isSupport(m, assigned?.position);
+    }),
+    trailing = props.index === 5,
+    players = trailing ? ranking.slice(-5) : ranking.slice(0, 5),
+    leader = trailing
+      ? (portraitCandidates.at(-1) ?? players.at(-1))
+      : players[0];
+  if (!leader) return <AbsoluteFill />;
+  const color = teamColor(leader, s);
   return (
     <AbsoluteFill>
       <Title
-        en={m.cs ? "03 / FRAG LEADERS" : "04 / DAMAGE LEADERS"}
+        en={
+          m.cs
+            ? "03 / FRAG LEADERS"
+            : trailing
+              ? "05 / DAMAGE RANKING"
+              : "04 / DAMAGE LEADERS"
+        }
         props={props}
       >
-        {m.cs ? "击杀排行" : "伤害排行"}
+        {m.cs ? "击杀排行" : trailing ? "伤害后五" : "伤害前五"}
       </Title>
       <HeroArt
         p={leader}
@@ -2280,10 +2299,17 @@ function Damage(props: Ctx) {
       />
       <div
         data-damage-identity
+        data-damage-leader-slot={leader.slot}
         style={{ position: "absolute", top: 690, left: 85, width: 610 }}
       >
         <Tag color={color}>
-          {m.cs ? "全场击杀第一" : m.series ? "系列赛伤害第一" : "全场伤害第一"}
+          {m.cs
+            ? "全场击杀第一"
+            : trailing
+              ? "本场伤害"
+              : m.series
+                ? "系列赛伤害第一"
+                : "全场伤害第一"}
         </Tag>
         <div
           style={{
@@ -2315,7 +2341,8 @@ function Damage(props: Ctx) {
           }}
         >
           <span>
-            TOP 5 / {m.cs ? "击杀" : m.series ? "总伤害" : "英雄伤害"}
+            {trailing ? "BOTTOM 5" : "TOP 5"} /{" "}
+            {m.cs ? "击杀" : m.series ? "总伤害" : "英雄伤害"}
           </span>
           <span>
             {m.cs
@@ -2344,7 +2371,7 @@ function Damage(props: Ctx) {
               <span
                 style={{ ...digits, fontSize: 31, color: i === 0 ? c : p.dim }}
               >
-                {String(i + 1).padStart(2, "0")}
+                {String(ranking.indexOf(pl) + 1).padStart(2, "0")}
               </span>
               <Portrait p={pl} width={114} height={68} />
               <div>
@@ -2381,11 +2408,11 @@ function Damage(props: Ctx) {
                       height: "100%",
                       width:
                         (m.cs
-                          ? leader.kills
-                            ? (pl.kills / leader.kills) * progress * 100
+                          ? ranking[0].kills
+                            ? (pl.kills / ranking[0].kills) * progress * 100
                             : 0
-                          : leader.damage
-                            ? (pl.damage / leader.damage) * progress * 100
+                          : ranking[0].damage
+                            ? (pl.damage / ranking[0].damage) * progress * 100
                             : 0) + "%",
                       background: c,
                       boxShadow: "0 0 18px " + c + "44",
@@ -2396,6 +2423,147 @@ function Damage(props: Ctx) {
             </div>
           );
         })}
+      </div>
+    </AbsoluteFill>
+  );
+}
+function MvpScene(props: Ctx) {
+  const { match: m, settings: s } = props;
+  const selection = mvpFor(m, s);
+  if (!selection) return <AbsoluteFill />;
+  const p = palettes[s.theme];
+  const { player, kind } = selection;
+  const color = teamColor(player, s);
+  const label =
+    kind === "official"
+      ? `官方 MVP · ${selection.sourceName}`
+      : kind === "manual"
+        ? "手动选择"
+        : "伤害最高";
+  const shares = playerShares(m, player);
+  return (
+    <AbsoluteFill>
+      <Title en="06 / MATCH MVP" props={props}>
+        本局 MVP
+      </Title>
+      <div
+        style={{
+          position: "absolute",
+          left: 84,
+          top: 252,
+          width: 710,
+          height: 650,
+          overflow: "visible",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: -22,
+            left: 0,
+            fontFamily: display,
+            fontWeight: 900,
+            fontSize: 290,
+            lineHeight: 1,
+            color: color + "12",
+            letterSpacing: 4,
+          }}
+        >
+          MVP
+        </div>
+        <HeroArt
+          p={player}
+          style={{
+            position: "absolute",
+            left: 30,
+            top: 50,
+            width: 680,
+            height: 570,
+            opacity: 0.98,
+            filter: "drop-shadow(0 0 34px " + color + "55)",
+            maskImage: "linear-gradient(to bottom,#000 84%,transparent 100%)",
+          }}
+        />
+      </div>
+      <div
+        data-mvp-identity
+        style={{ position: "absolute", left: 900, right: 88, top: 292 }}
+      >
+        <Tag color={color}>{label}</Tag>
+        <div
+          data-mvp-name
+          style={{
+            ...digits,
+            fontSize: fitDisplay(player.name, 860, 92),
+            marginTop: 18,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {player.name}
+        </div>
+        <div style={{ color: p.dim, fontSize: 26, marginTop: 14 }}>
+          {m[player.side]} · {player.hero}
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 22,
+            marginTop: 70,
+          }}
+        >
+          {[
+            {
+              label: "K / D / A",
+              value: `${player.kills} / ${player.deaths} / ${player.assists}`,
+            },
+            {
+              label: m.series ? "总伤害" : "英雄伤害",
+              value: num(player.damage),
+            },
+            {
+              label: "伤害占比",
+              value: axisValue(shares.damage, "%"),
+            },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              style={{ borderTop: "2px solid " + color, paddingTop: 15 }}
+            >
+              <Tag color={p.dim}>{stat.label}</Tag>
+              <div
+                style={{
+                  ...digits,
+                  color,
+                  fontSize: fitDisplay(stat.value, 220, 36),
+                  marginTop: 11,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {stat.value}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            marginTop: 58,
+            paddingTop: 22,
+            borderTop: "1px solid " + p.line,
+          }}
+        >
+          <FullStats match={m} player={player} palette={p} />
+        </div>
+        {!m.series && m.game === "lol" && (
+          <div style={{ marginTop: 28 }}>
+            <Loadout player={player} palette={p} />
+          </div>
+        )}
+        {!m.series && m.game !== "cs2" && player.inventory && (
+          <div style={{ marginTop: 28 }}>
+            <Inventory inventory={player.inventory} palette={p} compact />
+          </div>
+        )}
       </div>
     </AbsoluteFill>
   );
@@ -2520,7 +2688,10 @@ function Outro(props: Ctx) {
 }
 function FilmScene(props: Ctx) {
   const frame = useCurrentFrame();
-  const length = props.segments[props.index].frames;
+  const length =
+    props.segments.find(
+      (segment, index) => (segment.sceneIndex ?? index) === props.index,
+    )?.frames ?? 0;
   const opacity = Math.min(
     enter(frame, 0, 10),
     interpolate(frame, [length - 8, length - 1], [1, 0], {
@@ -2528,13 +2699,16 @@ function FilmScene(props: Ctx) {
       extrapolateRight: "clamp",
     }),
   );
-  const Component = [
-    Intro,
-    props.match.game === "lol" ? TeamResources : Economy,
-    RadarScene,
-    Damage,
-    Outro,
-  ][props.index];
+  const Component =
+    {
+      0: Intro,
+      1: props.match.game === "lol" ? TeamResources : Economy,
+      2: RadarScene,
+      3: Damage,
+      4: Outro,
+      5: Damage,
+      6: MvpScene,
+    }[props.index] ?? Outro;
   return (
     <AbsoluteFill style={{ opacity }}>
       <Component {...props} />
@@ -2574,7 +2748,7 @@ export function MatchFilm(props: VideoProps) {
   const { match: m, settings: s } = local;
   const p = palettes[s.theme];
   const sceneIndex = segment.sceneIndex ?? index;
-  const slots = chapter?.slots ?? sceneSlots(m);
+  const slots = chapter?.slots ?? sceneSlots(m, s);
   const scope =
     chapter?.key === "opening"
       ? "完整战报"
@@ -2747,7 +2921,7 @@ export function MatchFilm(props: VideoProps) {
                 >
                   0{i + 1}
                 </span>
-                {sceneNames(m)[sceneSlots(m).indexOf(slot)]}
+                {sceneNames(m, s)[sceneSlots(m, s).indexOf(slot)]}
               </span>
             ))}
           </div>

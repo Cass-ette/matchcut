@@ -78,16 +78,29 @@ export const positionNames = (m: ReportData) =>
     : m.game === "lol"
       ? LOL_POSITION_NAMES
       : POSITION_NAMES;
-export const sceneNames = (m: ReportData) =>
-  m.game === "cs2"
-    ? ["地图战报", "选手雷达", "击杀排行", "赛果回顾"]
-    : m.series
-      ? ["系列赛比分", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
-      : m.game === "lol"
-        ? ["比赛战报", "资源对比", "对位雷达", "伤害排行", "赛果回顾"]
-        : SCENES;
-export const sceneSlots = (m: ReportData) =>
-  m.game === "cs2" ? [0, 2, 3, 4] : [0, 1, 2, 3, 4];
+export const sceneSlots = (m: ReportData, settings?: Settings) => {
+  if (m.game === "cs2") return [0, 2, 3, 4];
+  const slots = [0, 1, 2, 3, 5];
+  if (settings && mvpFor(m, settings)) slots.push(6);
+  return [...slots, 4];
+};
+export const sceneNames = (m: ReportData, settings?: Settings) => {
+  const names: Record<number, string> = {
+    0: m.series ? "系列赛比分" : "比赛战报",
+    1: "资源对比",
+    2: "对位雷达",
+    3: "伤害前五",
+    4: "赛果回顾",
+    5: "伤害后五",
+    6: "本局 MVP",
+  };
+  if (m.game === "cs2")
+    return sceneSlots(m, settings).map(
+      (slot) =>
+        ({ 0: "地图战报", 2: "选手雷达", 3: "击杀排行", 4: "赛果回顾" })[slot],
+    );
+  return sceneSlots(m, settings).map((slot) => names[slot]);
+};
 export function gameScope(m: ReportData): string {
   if (m.cs) return m.cs.map;
   if (!m.series) return m.gameNumber ? `G${m.gameNumber}` : "本场";
@@ -154,6 +167,15 @@ export const settingsSchema = z.object({
   outro: z.string().trim().max(56).default("下一场，继续见。"),
   pace: z.enum(["snappy", "standard", "relaxed"]).default("standard"),
   captions: z.boolean().default(true),
+  mvp: z
+    .object({
+      enabled: z.boolean().default(false),
+      mode: z.enum(["auto", "manual"]).default("auto"),
+      manual: z
+        .record(matchIdSchema, z.number().int().min(0).max(255))
+        .default({}),
+    })
+    .default({ enabled: false, mode: "auto", manual: {} }),
   scripts: z.array(z.string().trim().max(240)).length(5),
   gameScripts: z
     .record(matchIdSchema, z.array(z.string().trim().max(240)).length(5))
@@ -234,6 +256,12 @@ export type PlayerData = {
   champions?: { hero: string; image: string; games: number }[];
 };
 export type LolLoadoutIcon = { id: number; name: string; image?: string };
+export type OfficialMvp = {
+  // The provider identity must resolve to this exact player's game-local slot.
+  playerSlot: number;
+  sourceName: string;
+  sourceUrl: string;
+};
 export type MatchData = {
   game?: Game;
   id: string;
@@ -265,6 +293,8 @@ export type MatchData = {
     quantityMode?: "occupied-slots";
   };
   runeSource?: { url: string; fetchedAt: string; timestamp: string };
+  // Only write this after independently matching the official award to the game.
+  officialMvp?: OfficialMvp;
   cs?: {
     version: "CS2" | "CSGO";
     map: string;
@@ -643,6 +673,39 @@ export function refreshSettings(
 }
 export const sortedDamage = (m: ReportData) =>
   [...(m.series?.players ?? m.players)].sort((a, b) => b.damage - a.damage);
+export type MvpSelection = {
+  player: PlayerData;
+  kind: "official" | "damage" | "manual";
+  sourceName?: string;
+  sourceUrl?: string;
+};
+export function mvpFor(
+  match: ReportData,
+  settings: Settings,
+): MvpSelection | undefined {
+  // A series aggregate is not an individual game award, and CS MVP is out of scope.
+  if (match.game === "cs2" || match.series || !settings.mvp.enabled)
+    return undefined;
+  const manual = settings.mvp.manual[match.id];
+  if (settings.mvp.mode === "manual" && manual !== undefined) {
+    const player = match.players.find((item) => item.slot === manual);
+    if (player) return { player, kind: "manual" };
+  }
+  if (match.officialMvp) {
+    const player = match.players.find(
+      (item) => item.slot === match.officialMvp!.playerSlot,
+    );
+    if (player)
+      return {
+        player,
+        kind: "official",
+        sourceName: match.officialMvp.sourceName,
+        sourceUrl: match.officialMvp.sourceUrl,
+      };
+  }
+  const player = sortedDamage(match)[0];
+  return player ? { player, kind: "damage" } : undefined;
+}
 export const csPlayerOrder = (a: PlayerData, b: PlayerData) =>
   b.kills - a.kills ||
   a.deaths - b.deaths ||
@@ -921,7 +984,7 @@ export function previewProps(
   const base = [7, 10, groups.length > 1 ? groups.length * 18 : 24, 10, 7];
   const speed = { snappy: 0.82, standard: 1, relaxed: 1.2 }[settings.pace];
   // Keep script slots stable for existing projects; CS has no resource scene.
-  const segments = settings.scripts.map((text, i) =>
+  const scriptSegments = settings.scripts.map((text, i) =>
     match.game === "cs2" && i === 1
       ? { text: "", frames: 0 }
       : {
@@ -931,7 +994,7 @@ export function previewProps(
           ),
         },
   );
-  const captionSegments = segments.flatMap((segment, i) => {
+  const captionSegments = scriptSegments.flatMap((segment, i) => {
     if (
       i !== 2 ||
       groups.length === 1 ||
@@ -948,11 +1011,47 @@ export function previewProps(
         (group.pair?.map((p) => p.name).join(" vs ") || "对位待修正"),
     }));
   });
+  if (match.game === "cs2")
+    return {
+      match,
+      settings,
+      segments: scriptSegments,
+      captions: makeCaptions(captionSegments),
+      ...(bgmTrack && settings.bgm?.trackId === bgmTrack.id
+        ? { bgmTrack }
+        : {}),
+    };
+  const extra = {
+    text: "",
+    frames: Math.ceil(10 * speed * FPS),
+    sceneIndex: 5,
+  };
+  const mvp = mvpFor(match, settings)
+    ? [{ text: "", frames: Math.ceil(7 * speed * FPS), sceneIndex: 6 }]
+    : [];
+  // Scripts remain five fixed fields. Extra scenes carry no editable copy.
+  const segments = [
+    { ...scriptSegments[0], sceneIndex: 0 },
+    { ...scriptSegments[1], sceneIndex: 1 },
+    { ...scriptSegments[2], sceneIndex: 2 },
+    { ...scriptSegments[3], sceneIndex: 3 },
+    extra,
+    ...mvp,
+    { ...scriptSegments[4], sceneIndex: 4 },
+  ];
   return {
     match,
     settings,
     segments,
-    captions: makeCaptions(captionSegments),
+    captions: makeCaptions([
+      scriptSegments[0],
+      scriptSegments[1],
+      ...captionSegments.slice(2, -2),
+      scriptSegments[3],
+      extra,
+      ...mvp,
+      scriptSegments[4],
+    ]),
     ...(bgmTrack && settings.bgm?.trackId === bgmTrack.id ? { bgmTrack } : {}),
   };
 }
@@ -988,7 +1087,13 @@ function fullVideoProps(
   };
   if (games.length === 1) {
     // The aggregate of one game would repeat the same statistics.
-    add(games[0].id, gameScope(games[0]), games[0], settings, [0, 1, 2, 3, 4]);
+    add(
+      games[0].id,
+      gameScope(games[0]),
+      games[0],
+      settings,
+      sceneSlots(games[0], settings),
+    );
   } else {
     add("opening", "开场", summary, settings, [0]);
     for (const game of games) {
@@ -999,17 +1104,27 @@ function fullVideoProps(
         local.accent = settings.secondary;
         local.secondary = settings.accent;
       }
-      add(game.id, gameScope(game), game, local, [1, 2, 3]);
+      add(game.id, gameScope(game), game, local, [
+        1,
+        2,
+        3,
+        5,
+        ...(mvpFor(game, local) ? [6] : []),
+      ]);
     }
-    add("summary", "系列赛汇总", summary, settings, [1, 2, 3, 4]);
+    add("summary", "系列赛汇总", summary, settings, [1, 2, 3, 5, 4]);
   }
   const segments: Segment[] = [];
   const captions: Caption[] = [];
   let offset = 0;
   chapters.forEach((chapter, chapterIndex) => {
     chapter.slots.forEach((sceneIndex) => {
-      const segment = chapter.segments[sceneIndex];
-      const localStart = totalFrames(chapter.segments.slice(0, sceneIndex));
+      const segmentIndex = chapter.segments.findIndex(
+        (segment, index) => (segment.sceneIndex ?? index) === sceneIndex,
+      );
+      const segment = chapter.segments[segmentIndex];
+      if (!segment) throw new Error("完整视频缺少场景数据，请重新载入比赛。");
+      const localStart = totalFrames(chapter.segments.slice(0, segmentIndex));
       for (const caption of chapter.captions) {
         if (
           caption.start >= localStart &&
@@ -1055,7 +1170,9 @@ export function videoScenes(props: VideoProps) {
         chapter,
         match: local.match,
         settings: local.settings,
-        name: sceneNames(local.match)[sceneSlots(local.match).indexOf(slot)],
+        name: sceneNames(local.match, local.settings)[
+          sceneSlots(local.match, local.settings).indexOf(slot)
+        ],
       },
     ];
   });

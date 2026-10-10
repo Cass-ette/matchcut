@@ -18,6 +18,7 @@ import {
   refreshSettings,
   comparisonScript,
   makeCaptions,
+  mvpFor,
   exportResolutions,
 } from "../src/domain";
 const fixture = JSON.parse(
@@ -253,7 +254,7 @@ test("blank scripts are valid and omit captions without collapsing scene timing"
     scripts: ["", "  ", "", "", ""],
   });
   const props = previewProps(m, settings);
-  assert.equal(props.segments.length, 5);
+  assert.equal(props.segments.length, 6);
   assert.ok(props.segments.every((s) => s.frames > 0));
   assert.deepEqual(props.captions, []);
   assert.deepEqual(refreshSettings(m, settings).scripts, ["", "", "", "", ""]);
@@ -264,4 +265,43 @@ test("blank scripts are valid and omit captions without collapsing scene timing"
   ]);
   assert.equal(mixed[0].start, 128);
   assert.equal(mixed.at(-1)!.end, 288);
+});
+
+test("MVP is explicit about source, honors a valid manual slot and falls back to damage", () => {
+  const m = match();
+  const settings = settingsSchema.parse({
+    ...defaultSettings(m),
+    mvp: { enabled: true, mode: "auto", manual: {} },
+  });
+  assert.equal(mvpFor(m, settings)?.kind, "damage");
+  assert.equal(mvpFor(m, settings)?.player.name, facts(m).top.name);
+  const official = {
+    ...m,
+    officialMvp: {
+      playerSlot: m.players[1].slot,
+      sourceName: "Tournament operator",
+      sourceUrl: "https://example.test/mvp",
+    },
+  };
+  assert.deepEqual(mvpFor(official, settings), {
+    player: official.players[1],
+    kind: "official",
+    sourceName: "Tournament operator",
+    sourceUrl: "https://example.test/mvp",
+  });
+  const manual = {
+    ...settings,
+    mvp: {
+      ...settings.mvp,
+      mode: "manual" as const,
+      manual: { [m.id]: m.players[2].slot },
+    },
+  };
+  assert.equal(mvpFor(official, manual)?.kind, "manual");
+  assert.equal(mvpFor(official, manual)?.player.slot, m.players[2].slot);
+  const props = previewProps(m, settings);
+  assert.deepEqual(
+    props.segments.map((segment) => segment.sceneIndex),
+    [0, 1, 2, 3, 5, 6, 4],
+  );
 });

@@ -27,6 +27,13 @@ import {
 } from "../src/domain";
 
 const root = process.cwd();
+export function renderConcurrency() {
+  const available = Math.max(1, os.cpus().length - 1);
+  const configured = Number(process.env.MATCHCUT_RENDER_CONCURRENCY || 2);
+  const requested =
+    Number.isInteger(configured) && configured > 0 ? configured : 2;
+  return Math.min(available, requested);
+}
 export type Job = {
   id: string;
   status: "preparing" | "rendering" | "done" | "error";
@@ -110,7 +117,7 @@ export async function runRender(
       outputLocation: path.join(folder, "matchcut.mp4"),
       inputProps: props,
       browserExecutable,
-      concurrency: Math.max(1, Math.min(4, os.cpus().length - 1)),
+      concurrency: renderConcurrency(),
       crf: 19,
       pixelFormat: "yuv420p",
       muted: !bgmTrack,

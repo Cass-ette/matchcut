@@ -4,9 +4,12 @@ import { chromium, type Page } from "playwright-core";
 import { renderStill, selectComposition } from "@remotion/renderer";
 import { browserPath, prepareBundle } from "../server/render";
 import {
+  assignedPositions,
   comparisons,
   defaultSettings,
+  isSupport,
   previewProps,
+  sortedDamage,
   totalFrames,
   type ReportData,
   type VideoProps,
@@ -52,7 +55,7 @@ async function seek(page: Page, frame: number, duration: number) {
   await page.evaluate(() => document.fonts.ready);
 }
 
-async function check(page: Page, mode: number | "damage") {
+async function check(page: Page, mode: number | "damage" | "mvp") {
   const failures = await page.evaluate((mode) => {
     const errors: string[] = [];
     const rect = (selector: string) =>
@@ -70,7 +73,15 @@ async function check(page: Page, mode: number | "damage") {
           errors.push("Text overflow: " + el.textContent);
       }
     };
-    if (mode === "damage" || mode < 2) {
+    if (mode === "mvp") {
+      const identity = rect("[data-mvp-identity]");
+      const hero = rect("[data-hero-art]");
+      const film = rect("[data-match-film]");
+      if (overlap(identity, hero)) errors.push("MVP identity overlaps hero");
+      if (identity.right > film.right || identity.left < film.left)
+        errors.push("MVP identity leaves film bounds");
+      containedText("[data-mvp-name]");
+    } else if (mode === "damage" || mode < 2) {
       const identity = rect(
         mode === "damage" ? "[data-damage-identity]" : "[data-player-identity]",
       );
@@ -132,8 +143,17 @@ try {
     await page.addInitScript("window.__name = (value) => value;");
     page.on("pageerror", (error) => errors.push(error.message));
     const settings = defaultSettings(match);
+    if (name === "dota" || name === "lol") settings.mvp.enabled = true;
     const props = previewProps(match, settings);
     const duration = totalFrames(props.segments);
+    const segmentStart = (slot: number) => {
+      let offset = 0;
+      for (const [index, segment] of props.segments.entries()) {
+        if ((segment.sceneIndex ?? index) === slot) return offset;
+        offset += segment.frames;
+      }
+      throw new Error(`Scene ${slot} is missing from ${name}`);
+    };
     await page.route("**/api/bootstrap?*", (route) =>
       route.fulfill({
         json: { match, settings, preferences: null, jobs: [], bgmTracks: [] },
@@ -148,11 +168,14 @@ try {
     await page.locator(".scene-strip button").first().waitFor();
     if (name !== "stress") {
       let offset = 0;
-      for (let scene = 0; scene < props.segments.length; scene++) {
-        if ([0, 1, 4].includes(scene)) {
+      for (let index = 0; index < props.segments.length; index++) {
+        const segment = props.segments[index];
+        const scene = segment.sceneIndex ?? index;
+        if ([0, 1, 4, 6].includes(scene)) {
           const frame = offset + 150;
           await seek(page, frame, duration);
           await checkCopy(page, match);
+          if (scene === 6) await check(page, "mvp");
           checks++;
           const stillName = `${name}-scene-${scene}`;
           await page.locator(".player-shell").screenshot({
@@ -160,12 +183,15 @@ try {
           });
           stills.push({ name: stillName, props, frame });
         }
-        offset += props.segments[scene].frames;
+        offset += segment.frames;
       }
     }
-    const start = props.segments[0].frames + props.segments[1].frames;
+    const start = segmentStart(2);
     const groups = comparisons(match, settings);
-    const chapter = props.segments[2].frames / groups.length;
+    const chapter =
+      props.segments.find(
+        (segment, index) => (segment.sceneIndex ?? index) === 2,
+      )!.frames / groups.length;
     for (let group = 0; group < groups.length; group++) {
       for (let mode = 0; mode < 3; mode++) {
         const frame = Math.round(
@@ -194,16 +220,38 @@ try {
         await checkCopy(page, match);
       }
     }
-    const damageFrame = start + props.segments[2].frames + 90;
-    await seek(page, damageFrame, duration);
-    await page.locator("[data-damage-identity]").waitFor();
-    await check(page, "damage");
-    await checkCopy(page, match);
-    await page
-      .locator(".player-shell")
-      .screenshot({ path: `${folder}/${name}-damage-preview.png` });
-    if (name !== "stress")
-      stills.push({ name: `${name}-damage`, props, frame: damageFrame });
+    for (const [slot, label] of [
+      [3, "damage-top"],
+      [5, "damage-bottom"],
+    ] as const) {
+      const damageFrame = segmentStart(slot) + 90;
+      await seek(page, damageFrame, duration);
+      await page.locator("[data-damage-identity]").waitFor();
+      await check(page, "damage");
+      await checkCopy(page, match);
+      if (slot === 5 && match.game !== "cs2") {
+        const expected = sortedDamage(match)
+          .filter((player) => {
+            const position = assignedPositions(match, settings).find(
+              (entry) => entry.player.slot === player.slot,
+            )?.position;
+            return !isSupport(match, position);
+          })
+          .at(-1);
+        assert.equal(
+          await page
+            .locator("[data-damage-identity]")
+            .getAttribute("data-damage-leader-slot"),
+          String(expected?.slot ?? sortedDamage(match).at(-1)?.slot),
+          "Bottom-five portrait should prefer the lowest-damage non-support",
+        );
+      }
+      await page
+        .locator(".player-shell")
+        .screenshot({ path: `${folder}/${name}-${label}-preview.png` });
+      if (name !== "stress")
+        stills.push({ name: `${name}-${label}`, props, frame: damageFrame });
+    }
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 1100 });
       await check(page, "damage");

@@ -7,13 +7,19 @@ import {
   VIDEO_HEIGHT,
   totalFrames,
   VideoProps,
+  settingsSchema,
 } from "../domain";
 import preview from "../../data/fixtures/preview.json";
 const Root = () => (
   <Composition
     id="MatchFilm"
     component={MatchFilm}
-    defaultProps={preview as VideoProps}
+    defaultProps={{
+      ...(preview as unknown as VideoProps),
+      settings: settingsSchema.parse(
+        (preview as unknown as VideoProps).settings,
+      ),
+    }}
     width={VIDEO_WIDTH}
     height={VIDEO_HEIGHT}
     fps={FPS}
