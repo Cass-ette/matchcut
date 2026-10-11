@@ -18,6 +18,7 @@ import { comparisonStats, playerShares, playerStats } from "../player-stats";
 import { teamInitials } from "../media";
 import { StatIcon, StatLabel } from "../StatIcon";
 import { PlayerPlaceholder } from "../PlayerPlaceholder";
+import { MusicBadge } from "./MusicBadge";
 import { type InventoryItem, type PlayerInventory } from "../items";
 import {
   PlayerData,
@@ -2832,6 +2833,10 @@ export function MatchFilm(props: VideoProps) {
       ? ` · ${m[m.winner]} 胜 · ${m.winner === "radiant" ? m.radiantScore : m.direScore} : ${m.winner === "radiant" ? m.direScore : m.radiantScore} · ${matchDuration(m.duration)}`
       : "";
   const caption = props.captions.find((c) => frame >= c.start && frame < c.end);
+  const music = s.bgm;
+  const showMusic = Boolean(
+    props.bgmTrack && music?.showInfo && music.volume > 0,
+  );
   return (
     <PlayerVisualContext.Provider
       value={m.game === "cs2" || s.playerVisual === "photo"}
@@ -2970,9 +2975,10 @@ export function MatchFilm(props: VideoProps) {
           </div>
         )}
         <div
+          data-film-footer
           style={{
             position: "absolute",
-            bottom: 31,
+            bottom: showMusic ? 18 : 31,
             left: 84,
             right: 84,
             display: "flex",
@@ -2981,13 +2987,40 @@ export function MatchFilm(props: VideoProps) {
             color: p.dim,
             fontSize: 17,
             letterSpacing: 1,
+            gap: 28,
           }}
         >
-          <span>
-            {gameScope(m)}
-            {m.date ? " · " + m.date.slice(0, 10) : ""}
-          </span>
-          <div style={{ display: "flex", gap: 25 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 28,
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {showMusic && props.bgmTrack && music && (
+              <MusicBadge
+                track={props.bgmTrack}
+                settings={music}
+                color={s.accent}
+                ink={p.ink}
+                muted={p.dim}
+                opacity={
+                  bgmVolume(frame, total, props.bgmTrack.duration, music) /
+                  music.volume
+                }
+              />
+            )}
+            <span style={{ flexShrink: 0, fontSize: showMusic ? 15 : 17 }}>
+              {gameScope(m)}
+              {m.date ? " · " + m.date.slice(0, 10) : ""}
+            </span>
+          </div>
+          <div
+            data-film-navigation
+            style={{ display: "flex", gap: showMusic ? 18 : 25, flexShrink: 0 }}
+          >
             {slots.map((slot, i) => (
               <span
                 key={slot}

@@ -189,6 +189,9 @@ export const settingsSchema = z.object({
       trackId: z.string().regex(/^[a-f0-9]{64}$/),
       volume: z.number().min(0).max(1).default(0.35),
       loop: z.boolean().default(true),
+      showInfo: z.boolean().optional(),
+      displayTitle: z.string().trim().max(160).optional(),
+      displayArtist: z.string().trim().max(160).optional(),
     })
     .optional(),
 });
@@ -196,6 +199,9 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type BgmTrack = {
   id: string;
   name: string;
+  title?: string;
+  artist?: string;
+  cover?: string;
   duration: number;
   src: string;
   createdAt: string;
@@ -1191,6 +1197,15 @@ export function bgmVolume(
     bgm.volume *
     Math.max(0, Math.min(1, frame / fade, (end - 1 - frame) / fade))
   );
+}
+export function bgmDisplayText(track: BgmTrack, bgm?: Settings["bgm"]) {
+  return {
+    title:
+      bgm?.displayTitle?.trim() ||
+      track.title ||
+      track.name.replace(/\.(mp3|m4a|wav|aac|ogg|flac)$/i, ""),
+    artist: bgm?.displayArtist?.trim() || track.artist || "",
+  };
 }
 export function srt(captions: Caption[]) {
   const time = (frames: number) => {

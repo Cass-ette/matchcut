@@ -1614,6 +1614,51 @@ select {
   padding: 0;
   accent-color: #e2b7ee;
 }
+.bgm-appearance {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+.bgm-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bgm-cover-row > div:last-child {
+  min-width: 0;
+}
+.bgm-cover-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.bgm-cover-preview {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #ffffff30;
+}
+.bgm-cover-empty {
+  display: grid;
+  place-items: center;
+  background: repeating-radial-gradient(
+    circle,
+    #11141b 0px,
+    #11141b 2px,
+    #292d35 3px,
+    #11141b 4px
+  );
+}
+.bgm-cover-empty span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e2b7ee;
+  border: 6px solid #604b67;
+}
 .series-games {
   margin-top: 16px;
   border-top: 1px solid var(--line);

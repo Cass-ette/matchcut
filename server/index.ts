@@ -36,7 +36,7 @@ import {
   loadLolMatch,
   loadLolSeries,
 } from "./lol-source";
-import { importBgm, listBgm, resolveBgm } from "./audio-source";
+import { importBgm, importBgmCover, listBgm, resolveBgm } from "./audio-source";
 import { mediaGameSchema, mediaLibrary, mediaSlotSchema } from "./media-source";
 import { logoCatalog, logoRepositoryUrl, logoShaSchema } from "./logo-catalog";
 import {
@@ -362,6 +362,14 @@ app.post(
     res.json(
       await importBgm(req.body, String(req.query.filename || "我的 BGM")),
     );
+  }),
+);
+app.post(
+  "/api/bgm/:id/cover",
+  express.raw({ type: "application/octet-stream", limit: "10mb" }),
+  wrap(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw new Error("请选择封面图片。");
+    res.json(await importBgmCover(String(req.params.id), req.body));
   }),
 );
 app.get(

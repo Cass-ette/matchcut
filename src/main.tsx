@@ -67,6 +67,7 @@ import {
   previewProps,
   settingsSchema,
   totalFrames,
+  bgmDisplayText,
 } from "./domain";
 import { MatchFilm } from "./video/MatchFilm";
 import { groupLolSeries, LolSummary } from "./series";
@@ -171,6 +172,7 @@ function App() {
   } | null>(null);
   const [bgmTracks, setBgmTracks] = useState<BgmTrack[]>([]);
   const bgmInput = useRef<HTMLInputElement>(null),
+    bgmCoverInput = useRef<HTMLInputElement>(null),
     bgmPreview = useRef<HTMLAudioElement>(null);
   const player = useRef<PlayerRef>(null),
     importInput = useRef<HTMLInputElement>(null),
@@ -574,6 +576,13 @@ function App() {
         trackId: track.id,
         volume: settings?.bgm?.volume ?? 0.35,
         loop: true,
+        showInfo: settings?.bgm?.showInfo ?? false,
+        ...(settings?.bgm?.trackId === track.id
+          ? {
+              displayTitle: settings.bgm.displayTitle,
+              displayArtist: settings.bgm.displayArtist,
+            }
+          : {}),
       });
       setToast("BGM 已加入，生成视频时会一起导出");
     } catch (e) {
@@ -581,6 +590,29 @@ function App() {
     } finally {
       setLoading(false);
       if (bgmInput.current) bgmInput.current.value = "";
+    }
+  }
+  async function importMusicCover(file: File) {
+    if (!bgmTrack) return;
+    setLoading(true);
+    setError("");
+    try {
+      if (file.size > 10 * 1024 * 1024)
+        throw new Error("封面图片不能超过 10 MB。");
+      const track = await api<BgmTrack>(`/api/bgm/${bgmTrack.id}/cover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+      });
+      setBgmTracks((current) =>
+        current.map((item) => (item.id === track.id ? track : item)),
+      );
+      setToast("音乐封面已更新");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+      if (bgmCoverInput.current) bgmCoverInput.current.value = "";
     }
   }
   async function generate() {
@@ -1982,6 +2014,7 @@ function App() {
                               trackId: e.target.value,
                               volume: settings.bgm?.volume ?? 0.35,
                               loop: settings.bgm?.loop ?? true,
+                              showInfo: settings.bgm?.showInfo ?? false,
                             }
                           : undefined,
                       );
@@ -2052,6 +2085,101 @@ function App() {
                       />
                       <i />
                     </label>
+                    <label className="toggle-row">
+                      <span>
+                        <b>显示音乐信息</b>
+                        <small>左下角常驻封面唱片与曲名</small>
+                      </span>
+                      <input
+                        type="checkbox"
+                        aria-label="显示音乐信息"
+                        checked={Boolean(settings.bgm.showInfo)}
+                        onChange={(e) =>
+                          patch("bgm", {
+                            ...settings.bgm!,
+                            showInfo: e.target.checked,
+                          })
+                        }
+                      />
+                      <i />
+                    </label>
+                    {settings.bgm.showInfo && (
+                      <div className="bgm-appearance">
+                        <div className="bgm-cover-row">
+                          {bgmTrack.cover ? (
+                            <img
+                              src={bgmTrack.cover}
+                              alt="音乐封面"
+                              className="bgm-cover-preview"
+                            />
+                          ) : (
+                            <div
+                              className="bgm-cover-preview bgm-cover-empty"
+                              aria-label="默认唱片"
+                            >
+                              <span />
+                            </div>
+                          )}
+                          <div>
+                            <button
+                              className="text-button"
+                              disabled={loading || busy}
+                              onClick={() => bgmCoverInput.current?.click()}
+                            >
+                              <Upload size={13} />{" "}
+                              {bgmTrack.cover ? "更换封面" : "上传封面"}
+                            </button>
+                            <small>JPG / PNG / WebP，最大 10 MB</small>
+                          </div>
+                        </div>
+                        <input
+                          type="file"
+                          ref={bgmCoverInput}
+                          hidden
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            if (e.target.files?.[0])
+                              void importMusicCover(e.target.files[0]);
+                          }}
+                        />
+                        <label
+                          className="field-label"
+                          htmlFor="bgm-display-title"
+                        >
+                          显示曲名
+                        </label>
+                        <input
+                          id="bgm-display-title"
+                          maxLength={160}
+                          value={settings.bgm.displayTitle ?? ""}
+                          placeholder={bgmDisplayText(bgmTrack).title}
+                          onChange={(e) =>
+                            patch("bgm", {
+                              ...settings.bgm!,
+                              displayTitle: e.target.value,
+                            })
+                          }
+                        />
+                        <label
+                          className="field-label"
+                          htmlFor="bgm-display-artist"
+                        >
+                          歌手 <span>选填</span>
+                        </label>
+                        <input
+                          id="bgm-display-artist"
+                          maxLength={160}
+                          value={settings.bgm.displayArtist ?? ""}
+                          placeholder={bgmTrack.artist || "歌手 / 艺术家"}
+                          onChange={(e) =>
+                            patch("bgm", {
+                              ...settings.bgm!,
+                              displayArtist: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    )}
                   </>
                 )}
                 {settings.bgm && !bgmTrack && (

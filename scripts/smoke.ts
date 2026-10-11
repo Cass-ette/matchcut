@@ -62,6 +62,10 @@ if (process.argv.includes("--bgm")) {
   await import("./bgm-smoke");
   process.exit(0);
 }
+if (process.argv.includes("--music-display")) {
+  await import("./music-display-smoke");
+  process.exit(0);
+}
 
 const base = "http://127.0.0.1:4317";
 const folder = "output/verification";
