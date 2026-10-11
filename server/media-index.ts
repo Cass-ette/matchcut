@@ -81,6 +81,9 @@ async function signature(game: Game) {
     "public/assets/lol",
     "public/assets/heroes",
     "public/assets/renders",
+    "public/assets/cs",
+    "public/assets/players",
+    "public/assets/teams",
   ];
   return fingerprint([
     "media-v1",

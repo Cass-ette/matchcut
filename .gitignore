@@ -73,6 +73,9 @@ data/preferences-lol.json
 !/public/assets/renders/106.png
 
 data/preferences-cs2.json
+data/game-modules.json
+data/game-modules.json.*.tmp
+data/module-staging/
 
 /public/assets/lol/loadouts/*/*.png
 !/public/assets/lol/loadouts/14.6/*.png

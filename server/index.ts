@@ -56,6 +56,8 @@ import {
 import { Thumbnails } from "./thumbnails";
 import { lolLoadouts } from "./lol-loadout";
 import { syncLolGameLoadout } from "./lol-game-loadout";
+import { GameModuleManager, purgeGameData } from "./game-modules";
+import type { Game } from "../src/domain";
 
 const loadAnyMatch = (id: string) =>
   id.startsWith("cs2-")
@@ -104,13 +106,94 @@ app.use("/assets", express.static(path.join(root, "public/assets")));
 app.use("/output", express.static(path.join(root, "output")));
 const jobs = await restoreJobs(path.join(root, "output"));
 const renderControls = new Map<string, RenderControl>();
+let gameRequests = 0;
+const modules = new GameModuleManager(root, {
+  busyReason: () =>
+    [...jobs.values()].some((j) => isActiveJob(j.status))
+      ? "请先完成或停止正在生成的视频，再管理游戏。"
+      : gameRequests
+        ? "正在读取或导入比赛资料，请稍后再试。"
+        : undefined,
+  purgeData: async (game) => {
+    await mediaLibrary.initialize();
+    await purgeGameData(root, game);
+  },
+});
+await modules.initialize();
+const gameForMatch = (id: string): Game =>
+  id.startsWith("cs2-") ? "cs2" : id.startsWith("lol-") ? "lol" : "dota2";
+app.use("/api", (req, res, next) => {
+  const route = req.path;
+  const game = route.startsWith("/lol/")
+    ? "lol"
+    : route.startsWith("/cs/")
+      ? "cs2"
+      : /^\/matches\//.test(route)
+        ? gameForMatch(route.split("/")[2])
+        : route === "/recent" || route === "/latest"
+          ? "dota2"
+          : route === "/preferences" ||
+              route === "/media" ||
+              route.startsWith("/media/")
+            ? mediaGameSchema.parse(req.query.game || "dota2")
+            : route === "/jobs" && req.method === "POST"
+              ? gameForMatch(String(req.body.matchId || ""))
+              : route === "/bootstrap"
+                ? modules.select(String(req.query.game || "dota2"))
+                : undefined;
+  if (game) {
+    try {
+      modules.assertEnabled(game);
+      if (modules.busy && req.method !== "GET")
+        throw new Error("游戏正在处理，请稍后再开始任务。");
+      res.locals.game = game;
+      gameRequests++;
+      let released = false;
+      res.locals.releaseGame = () => {
+        if (!released) {
+          gameRequests--;
+          released = true;
+        }
+      };
+      // Reserve during body upload too; an aborted client must not release an
+      // already-running import until that handler has finished its writes.
+      res.once("close", () => {
+        if (!res.locals.gameHandlerStarted) res.locals.releaseGame();
+      });
+    } catch (error) {
+      res.status(409).json({ error: (error as Error).message });
+      return;
+    }
+  }
+  next();
+});
 const wrap =
   (fn: (req: express.Request, res: express.Response) => Promise<any>) =>
   (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    Promise.resolve(fn(req, res)).catch(next);
+    if (res.locals.game) res.locals.gameHandlerStarted = true;
+    Promise.resolve(fn(req, res))
+      .catch(next)
+      .finally(() => {
+        res.locals.releaseGame?.();
+      });
   };
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, app: "matchcut", version: "0.1.0" }),
+);
+app.get("/api/modules", (_req, res) => res.json(modules.list()));
+app.post(
+  "/api/modules/:game",
+  wrap(async (req, res) => {
+    const game = mediaGameSchema.parse(req.params.game);
+    const input = z
+      .object({
+        action: z.enum(["enable", "hide", "install", "remove"]),
+        keepData: z.boolean().default(true),
+      })
+      .parse(req.body);
+    modules.start(game, input.action, input.keepData);
+    res.status(202).json(modules.list());
+  }),
 );
 app.post(
   "/api/player-photo/preview",
@@ -306,7 +389,11 @@ app.delete(
 app.get(
   "/api/bootstrap",
   wrap(async (req, res) => {
-    const game = mediaGameSchema.parse(req.query.game || "dota2");
+    const game = modules.select(String(req.query.game || "dota2"));
+    if (!game) {
+      res.json({ match: null, modules: modules.list().modules });
+      return;
+    }
     const lol = game === "lol",
       cs = game === "cs2";
     let saved = null;
@@ -336,6 +423,7 @@ app.get(
       jobs: [...jobs.values()]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 12),
+      modules: modules.list().modules,
     });
   }),
 );
@@ -704,7 +792,9 @@ if (built) {
   app.use(vite.middlewares);
 }
 console.log("正在同步本地资料索引；首次升级会读取已缓存比赛…");
-for (const game of ["dota2", "lol", "cs2"] as const) {
+for (const { game } of modules
+  .list()
+  .modules.filter((m) => m.installed && m.enabled)) {
   try {
     await ensureMediaIndex(game);
   } catch (error) {

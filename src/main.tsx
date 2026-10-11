@@ -76,6 +76,8 @@ import "./style.css";
 import { AssetAdmin } from "./AssetAdmin";
 import { LolLoadoutEditor } from "./LolLoadoutEditor";
 import { isActiveJob } from "./job-status";
+import { GameModuleGate, useGameModules } from "./GameModules";
+import { gameModules } from "./game-modules";
 
 type Job = {
   id: string;
@@ -136,6 +138,7 @@ const themes = [
   },
 ] as const;
 function App() {
+  const modules = useGameModules();
   const [match, setMatch] = useState<ReportData | null>(null),
     [settings, setSettings] = useState<Settings | null>(null),
     [error, setError] = useState(""),
@@ -199,6 +202,10 @@ function App() {
       { signal: AbortSignal.timeout(30_000) },
     )
       .then((data) => {
+        if (!data.match) {
+          location.href = "/games";
+          return;
+        }
         setMatch(data.match);
         setMatchId(data.match.id);
         singleGameId.current = data.match.id;
@@ -794,6 +801,7 @@ function App() {
           <>
             <p className="error-text">{error}</p>
             <button onClick={() => location.reload()}>重新连接</button>
+            <a href="/games">游戏管理</a>
           </>
         ) : (
           <p>
@@ -880,6 +888,7 @@ function App() {
         <div className="top-links">
           <span className="active">视频工作台</span>
           <a href={`/admin?game=${match.game || "dota2"}`}>素材管理</a>
+          <a href="/games">游戏管理</a>
           <button
             onClick={() => {
               setTab("design");
@@ -919,27 +928,24 @@ function App() {
         <div className="workspace-label">
           <Film size={17} />
           <div className="game-switch" aria-label="切换游戏">
-            <button
-              className={!lol && !cs ? "selected" : ""}
-              disabled={loading || busy}
-              onClick={() => void switchGame("dota2")}
-            >
-              Dota 2
-            </button>
-            <button
-              className={lol ? "selected" : ""}
-              disabled={loading || busy}
-              onClick={() => void switchGame("lol")}
-            >
-              英雄联盟
-            </button>
-            <button
-              className={cs ? "selected" : ""}
-              disabled={loading || busy}
-              onClick={() => void switchGame("cs2")}
-            >
-              CS
-            </button>
+            {gameModules
+              .filter((d) =>
+                modules.some(
+                  (m) => m.game === d.game && m.installed && m.enabled,
+                ),
+              )
+              .map((d) => (
+                <button
+                  key={d.game}
+                  className={
+                    (match.game || "dota2") === d.game ? "selected" : ""
+                  }
+                  disabled={loading || busy}
+                  onClick={() => void switchGame(d.game)}
+                >
+                  {d.name}
+                </button>
+              ))}
           </div>
         </div>
       </div>
@@ -2703,5 +2709,11 @@ function App() {
   );
 }
 createRoot(document.getElementById("root")!).render(
-  location.pathname.replace(/\/$/, "") === "/admin" ? <AssetAdmin /> : <App />,
+  <GameModuleGate>
+    {location.pathname.replace(/\/$/, "") === "/admin" ? (
+      <AssetAdmin />
+    ) : (
+      <App />
+    )}
+  </GameModuleGate>,
 );

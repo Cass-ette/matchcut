@@ -26,6 +26,7 @@ import {
   type MediaPage,
 } from "./media";
 import "./admin.css";
+import { useGameModules } from "./GameModules";
 import { LogoPicker } from "./LogoPicker";
 import { PlayerPlaceholder } from "./PlayerPlaceholder";
 
@@ -162,6 +163,7 @@ function ImageSlot({
 }
 
 export function AssetAdmin() {
+  const modules = useGameModules();
   const initialGame: Game =
     new URLSearchParams(location.search).get("game") === "cs2"
       ? "cs2"
@@ -375,6 +377,7 @@ export function AssetAdmin() {
         <nav className="top-links">
           <a href={`/?game=${game}`}>视频工作台</a>
           <span className="active">素材管理</span>
+          <a href="/games">游戏管理</a>
         </nav>
         <a className="top-right media-back" href={`/?game=${game}`}>
           <ArrowLeft size={16} />
@@ -387,24 +390,26 @@ export function AssetAdmin() {
           <h1>素材管理</h1>
         </div>
         <div className="game-switch">
-          {(["dota2", "lol", "cs2"] as const).map((g) => (
-            <button
-              key={g}
-              disabled={busy}
-              className={game === g ? "selected" : ""}
-              aria-pressed={game === g}
-              onClick={() => {
-                setQuery("");
-                setKind("team");
-                setGame(g);
-                setOffset(0);
-                setFilter("all");
-                setCounts({ team: 0, hero: 0, player: 0 });
-              }}
-            >
-              {g === "cs2" ? "CS" : g === "lol" ? "英雄联盟" : "Dota 2"}
-            </button>
-          ))}
+          {modules
+            .filter((m) => m.installed && m.enabled)
+            .map(({ game: g }) => (
+              <button
+                key={g}
+                disabled={busy}
+                className={game === g ? "selected" : ""}
+                aria-pressed={game === g}
+                onClick={() => {
+                  setQuery("");
+                  setKind("team");
+                  setGame(g);
+                  setOffset(0);
+                  setFilter("all");
+                  setCounts({ team: 0, hero: 0, player: 0 });
+                }}
+              >
+                {g === "cs2" ? "CS" : g === "lol" ? "英雄联盟" : "Dota 2"}
+              </button>
+            ))}
         </div>
       </div>
       <div className="media-tabs" role="tablist" aria-label="素材类别">

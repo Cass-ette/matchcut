@@ -92,6 +92,23 @@ async function main() {
         "还有生成或暂停中的任务。请在工作台点「停止任务」，或等生成完成后再关闭服务。",
       );
     }
+    const modulesResponse = await fetch(origin + "/api/modules", {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!modulesResponse.ok)
+      throw new Error("无法确认游戏管理状态，请恢复连接后再停止服务。");
+    // Older servers have no module API and return the SPA HTML here.
+    if (
+      modulesResponse.ok &&
+      modulesResponse.headers.get("content-type")?.includes("application/json")
+    ) {
+      const data = (await modulesResponse.json()) as {
+        modules: { operation?: unknown }[];
+        busyReason?: string;
+      };
+      if (data.modules.some((m) => m.operation) || data.busyReason)
+        throw new Error("正在处理游戏素材或比赛资料，请完成后再停止后台。");
+    }
     execFileSync("/bin/launchctl", ["bootout", target], { stdio: "inherit" });
     console.log("Matchcut 已停止。");
     return;
