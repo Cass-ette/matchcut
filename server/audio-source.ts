@@ -26,7 +26,7 @@ const trackSchema = z.object({
     .string()
     .regex(/^[a-f0-9]{64}\.jpg$/)
     .optional(),
-  metadataVersion: z.literal(1).optional(),
+  metadataVersion: z.union([z.literal(1), z.literal(2)]).optional(),
   duration: z.number().positive().max(21600),
   createdAt: z.string(),
 });
@@ -143,7 +143,11 @@ export async function importBgm(
         previous = trackSchema.parse(
           JSON.parse(await readFile(path.join(cache, id + ".json"), "utf8")),
         );
-        if (previous.metadataVersion === 1) return track;
+        if (
+          previous.metadataVersion === 2 &&
+          (!previous.coverFile || track.cover)
+        )
+          return track;
       } catch {
         /* Repair an incomplete local import. */
       }
@@ -190,7 +194,11 @@ export async function importBgm(
               .trim()
               .slice(0, 160) || undefined
           : undefined;
-      let coverFile = previous?.coverFile;
+      let coverFile =
+        previous?.coverFile &&
+        (await exists(path.join(assets, previous.coverFile)))
+          ? previous.coverFile
+          : undefined;
       const cover = probe.streams.find(
         (stream: any) =>
           stream.codec_type === "video" &&
@@ -198,7 +206,7 @@ export async function importBgm(
       );
       if (!coverFile && cover) {
         try {
-          const picture = path.join(temp, "embedded.png");
+          const picture = path.join(temp, "embedded.img");
           await exec(
             "ffmpeg",
             [
@@ -213,8 +221,12 @@ export async function importBgm(
               `0:${cover.index}`,
               "-frames:v",
               "1",
-              "-vf",
-              "scale=512:512:force_original_aspect_ratio=increase,crop=512:512",
+              // Some music files label TIFF/PNG covers as JPEG. Copy the
+              // original bytes so sharp can detect the actual image format.
+              "-c:v",
+              "copy",
+              "-f",
+              "image2",
               picture,
             ],
             { timeout: 30000, maxBuffer: 1024 * 1024 },
@@ -280,7 +292,7 @@ export async function importBgm(
         title: tag("title"),
         artist: tag("artist") || tag("album_artist"),
         coverFile,
-        metadataVersion: 1,
+        metadataVersion: 2,
         duration: actualDuration,
         createdAt: previous?.createdAt || new Date().toISOString(),
       });
